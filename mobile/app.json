@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "BusTracker",
+    "slug": "college-bus-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "bustracker",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyAxwF8dhIapt8Oo04f1Niip6-b_O0gOaCU"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "BusTracker uses your location to show your position on the transit map, identify your nearest bus stop, and provide accurate arrival estimates.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BusTracker uses background location for drivers during active bus trips to broadcast coordinates."
+      }
+    },
+    "android": {
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAxwF8dhIapt8Oo04f1Niip6-b_O0gOaCU"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0a0e1a"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ],
+      "package": "com.anonymous.collegebustracker"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BusTracker uses your location to display your position on the map and find your nearest bus stop.",
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
+  }
+}

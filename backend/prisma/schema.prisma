@@ -1,0 +1,182 @@
+// This is your Prisma schema file
+// Prisma 7: datasource URL is in prisma.config.ts, not here
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         String   @default("STUDENT")
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student       Student?
+  driver        Driver?
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Student {
+  id          String @id @default(cuid())
+  userId      String @unique
+  studentCode String @unique
+
+  courseStartYear       Int?
+  courseEndYear         Int?
+  accountExpirationDate DateTime?
+  accountStatus         String    @default("ACTIVE")
+
+  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedBus     Bus?   @relation("StudentBus", fields: [assignedBusId], references: [id])
+  assignedBusId   String?
+  assignedRoute   Route? @relation("StudentRoute", fields: [assignedRouteId], references: [id])
+  assignedRouteId String?
+  assignedStop    Stop?  @relation("StudentStop", fields: [assignedStopId], references: [id])
+  assignedStopId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("students")
+}
+
+model Driver {
+  id         String @id @default(cuid())
+  userId     String @unique
+  driverCode String @unique
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bus   Bus?
+  trips Trip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("drivers")
+}
+
+model Bus {
+  id                 String  @id @default(cuid())
+  busNumber          String  @unique
+  registrationNumber String  @unique
+  capacity           Int
+  status             String  @default("AVAILABLE")
+
+  driver   Driver? @relation(fields: [driverId], references: [id])
+  driverId String? @unique
+
+  route   Route?  @relation(fields: [routeId], references: [id])
+  routeId String?
+
+  students  Student[]     @relation("StudentBus")
+  trips     Trip[]
+  locations BusLocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("buses")
+}
+
+model Route {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  status      String  @default("ACTIVE")
+
+  stops    Stop[]
+  buses    Bus[]
+  trips    Trip[]
+  students Student[] @relation("StudentRoute")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("routes")
+}
+
+model Stop {
+  id        String  @id @default(cuid())
+  name      String
+  stopCode  String?
+  address   String?
+  latitude  Float
+  longitude Float
+  sequence  Int
+  eta       String?
+  status    String  @default("ACTIVE")
+
+  route   Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId String
+
+  students Student[] @relation("StudentStop")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("stops")
+}
+
+model Trip {
+  id        String    @id @default(cuid())
+  status    String    @default("ACTIVE")
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+
+  bus      Bus    @relation(fields: [busId], references: [id])
+  busId    String
+
+  driver   Driver @relation(fields: [driverId], references: [id])
+  driverId String
+
+  route   Route  @relation(fields: [routeId], references: [id])
+  routeId String
+
+  locations BusLocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("trips")
+}
+
+model BusLocation {
+  id        String   @id @default(cuid())
+  latitude  Float
+  longitude Float
+  timestamp DateTime @default(now())
+
+  trip   Trip   @relation(fields: [tripId], references: [id])
+  tripId String
+
+  bus   Bus    @relation(fields: [busId], references: [id])
+  busId String
+
+  @@index([busId, timestamp])
+  @@map("bus_locations")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  @@map("notifications")
+}
