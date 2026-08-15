@@ -46,6 +46,7 @@ export default function StudentTrackingScreen() {
   const [busLocation, setBusLocation] = useState<LocationData | null>(null);
   const [activeTrip, setActiveTrip] = useState<any>(null);
   const [fullRoute, setFullRoute] = useState<any>(null);
+  const [liveEta, setLiveEta] = useState<any>(null);
   const [voiceAlertPlayed, setVoiceAlertPlayed] = useState(false);
   const [alertBanner, setAlertBanner] = useState<string | null>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
@@ -97,12 +98,20 @@ export default function StudentTrackingScreen() {
       if (loc) {
         setBusLocation(loc);
       }
+
+      // Fetch intelligent ETA from backend
+      try {
+        const etaRes = await mobileApi.get(`/buses/${bus.id}/eta?stopId=${assignedStop?.id || ''}`);
+        if (etaRes.data.data) {
+          setLiveEta(etaRes.data.data);
+        }
+      } catch (e) {}
     } catch (e) {
       console.log('[TrackingScreen] Data load error:', e);
     } finally {
       setLoading(false);
     }
-  }, [bus?.id, route?.id, refreshUserData]);
+  }, [bus?.id, route?.id, assignedStop?.id, refreshUserData]);
 
   // Real-time Socket.IO Connection
   useEffect(() => {
@@ -120,15 +129,23 @@ export default function StudentTrackingScreen() {
       setBusLocation(data);
     });
 
+    socket.on('eta:update', (data: any) => {
+      if (data && data.busId === bus.id) {
+        setLiveEta(data);
+      }
+    });
+
     socket.on('trip:started', (data) => {
       setActiveTrip(data);
       setVoiceAlertPlayed(false);
       setAlertBanner(null);
+      loadData();
     });
 
     socket.on('trip:ended', () => {
       setActiveTrip(null);
       setBusLocation(null);
+      setLiveEta(null);
       setVoiceAlertPlayed(false);
       setAlertBanner(null);
     });
@@ -144,55 +161,44 @@ export default function StudentTrackingScreen() {
     return getNearestStopToUser(userLocation.latitude, userLocation.longitude, stops);
   }, [userLocation, stops]);
 
-  // ETA Architecture:
-  // Primary ETA is calculated from BUS live coordinates along the route to the target stop (assigned stop or next stop)
-  const routeEtaInfo = useMemo(() => {
-    if (!busLocation || !activeTrip) {
-      return null;
-    }
-
-    // If student has an assigned stop on this route, calculate route ETA to that stop
-    const target = assignedStop || (stops.length > 0 ? stops[stops.length - 1] : null);
-    if (!target) return null;
-
-    return calculateBusRouteEta(busLocation.latitude, busLocation.longitude, target, stops);
-  }, [busLocation, activeTrip, assignedStop, stops]);
-
   // Next stop along the route ahead of the bus
   const nextStopInfo = useMemo(() => {
     if (!busLocation) return { nextStop: null, distanceKm: 0, etaMinutes: 0 };
     return getNextStop(busLocation.latitude, busLocation.longitude, stops);
   }, [busLocation, stops]);
 
-  // Target Stop & ETA display strings
+  // Target Stop & ETA display strings (prioritize backend XGBoost ETA with local fallback)
   const displayNextStopName =
-    nextStopInfo.nextStop?.name || assignedStop?.name || (stops[0] ? stops[0].name : 'In Transit');
+    liveEta?.nextStopName ||
+    nextStopInfo.nextStop?.name ||
+    assignedStop?.name ||
+    (stops[0] ? stops[0].name : 'In Transit');
 
   const displayEtaText = useMemo(() => {
     if (!activeTrip || !busLocation) {
-      return 'ETA unavailable';
+      return 'OFFLINE';
     }
-    if (routeEtaInfo) {
-      return formatEta(routeEtaInfo.etaMinutes);
+    if (liveEta?.etaFormatted) {
+      return liveEta.etaFormatted;
     }
     if (nextStopInfo.etaMinutes !== undefined) {
       return formatEta(nextStopInfo.etaMinutes);
     }
-    return 'ETA unavailable';
-  }, [activeTrip, busLocation, routeEtaInfo, nextStopInfo]);
+    return 'CALCULATING...';
+  }, [activeTrip, busLocation, liveEta, nextStopInfo]);
 
   const displayDistanceText = useMemo(() => {
     if (!activeTrip || !busLocation) {
       return 'Bus Offline';
     }
-    if (routeEtaInfo) {
-      return formatDistance(routeEtaInfo.distanceKm);
+    if (liveEta?.distanceFormatted) {
+      return liveEta.distanceFormatted;
     }
     if (nextStopInfo.distanceKm) {
       return formatDistance(nextStopInfo.distanceKm);
     }
     return 'Tracking...';
-  }, [activeTrip, busLocation, routeEtaInfo, nextStopInfo]);
+  }, [activeTrip, busLocation, liveEta, nextStopInfo]);
 
   // Proximity Alert Trigger for Assigned Stop
   useEffect(() => {
@@ -559,12 +565,46 @@ export default function StudentTrackingScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Bottom Live Route Status Card Overlay */}
+          {/* Bottom Intelligent Real-Time ETA Card Overlay */}
           <View style={[styles.bottomCard, shadows.lg]}>
+            {/* Header: Bus Badge, Live Pulse, and ETA Status */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ backgroundColor: 'rgba(14,165,233,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(14,165,233,0.3)' }}>
+                  <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '800' }}>
+                    BUS {bus?.busNumber || '24'}
+                  </Text>
+                </View>
+                {activeTrip && busLocation && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,185,129,0.12)', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 12 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success }} />
+                    <Text style={{ color: colors.success, fontSize: 10, fontWeight: '800' }}>LIVE</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Status and Confidence */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {liveEta?.confidence ? (
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700' }}>
+                      {Math.round(liveEta.confidence * 100)}% Conf
+                    </Text>
+                  </View>
+                ) : null}
+
+                {liveEta?.status ? (
+                  <StatusBadge status={liveEta.status} />
+                ) : (
+                  <StatusBadge status={activeTrip ? 'ON_TIME' : 'INACTIVE'} />
+                )}
+              </View>
+            </View>
+
             <View style={styles.bottomTopRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.nextStopTag}>
-                  {activeTrip ? 'NEXT UPCOMING STOP' : 'ASSIGNED ROUTE STOP'}
+                  {assignedStop ? `ASSIGNED STOP: ${assignedStop.name.toUpperCase()}` : 'NEXT UPCOMING STOP'}
                 </Text>
                 <Text style={styles.nextStopTitle} numberOfLines={1}>
                   {displayNextStopName}
@@ -577,7 +617,7 @@ export default function StudentTrackingScreen() {
                   (!activeTrip || !busLocation) && styles.etaBoxInactive,
                 ]}
               >
-                <Text style={styles.etaLabel}>ETA</Text>
+                <Text style={styles.etaLabel}>ARRIVING IN</Text>
                 <Text
                   style={[
                     styles.etaVal,
@@ -612,6 +652,17 @@ export default function StudentTrackingScreen() {
               <View style={styles.metaDivider} />
 
               <View style={styles.metaItem}>
+                <Ionicons name="speedometer-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.metaText}>
+                  {liveEta?.currentSpeedKmh !== undefined
+                    ? `${liveEta.currentSpeedKmh} km/h`
+                    : '24 km/h'}
+                </Text>
+              </View>
+
+              <View style={styles.metaDivider} />
+
+              <View style={styles.metaItem}>
                 <Ionicons
                   name="radio-outline"
                   size={14}
@@ -620,7 +671,7 @@ export default function StudentTrackingScreen() {
                 <Text style={styles.metaText}>
                   {busLocation
                     ? `Live (${new Date(busLocation.timestamp).toLocaleTimeString()})`
-                    : 'Awaiting Driver GPS'}
+                    : 'Awaiting GPS'}
                 </Text>
               </View>
             </View>

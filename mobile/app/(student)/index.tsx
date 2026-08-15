@@ -34,6 +34,7 @@ export default function StudentHomeScreen() {
   const [activeTrip, setActiveTrip] = useState<any>(null);
   const [latestLoc, setLatestLoc] = useState<any>(null);
   const [fullRoute, setFullRoute] = useState<any>(null);
+  const [liveEta, setLiveEta] = useState<any>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [showBusDetails, setShowBusDetails] = useState(false);
 
@@ -56,17 +57,23 @@ export default function StudentHomeScreen() {
 
     if (bus?.id) {
       try {
-        const res = await mobileApi.get(`/locations/bus/${bus.id}`);
-        setLatestLoc(res.data.data?.location);
-        setActiveTrip(res.data.data?.activeTrip);
+        const [locRes, etaRes] = await Promise.all([
+          mobileApi.get(`/locations/bus/${bus.id}`),
+          mobileApi.get(`/buses/eta/my-stop`).catch(() => ({ data: { data: null } })),
+        ]);
+        setLatestLoc(locRes.data.data?.location);
+        setActiveTrip(locRes.data.data?.activeTrip);
+        if (etaRes.data.data) {
+          setLiveEta(etaRes.data.data);
+        }
       } catch (e) {}
     }
   }, [bus?.id, route?.id, refreshUserData]);
 
   useEffect(() => {
     loadData();
-    // Poll every 12s for fresh location
-    const interval = setInterval(loadData, 12000);
+    // Poll every 10s for fresh location and ETA
+    const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
   }, [loadData]);
 
@@ -87,8 +94,7 @@ export default function StudentHomeScreen() {
   const stops = fullRoute?.stops || route?.stops || [];
   const sortedStops = [...stops].sort((a: any, b: any) => a.sequence - b.sequence);
 
-  // Distance & ETA calculation:
-  // Derived from live bus GPS coordinates along the route to assigned stop
+  // Distance & ETA calculation fallback
   let distanceKm = 0;
   let etaMinutes = 0;
   let nextStopInfo: any = { nextStop: null, distanceKm: 0, etaMinutes: 0 };
@@ -107,9 +113,15 @@ export default function StudentHomeScreen() {
     nextStopInfo = getNextStop(latestLoc.latitude, latestLoc.longitude, sortedStops);
   }
 
+  const displayEtaText = liveEta?.etaFormatted || (activeTrip && latestLoc ? formatEta(etaMinutes) : 'OFFLINE');
+  const displayDistanceText = liveEta?.distanceFormatted || (activeTrip && latestLoc ? formatDistance(distanceKm) : 'Offline');
+
   const nextStopName =
-    nextStopInfo.nextStop?.name || stop?.name || (sortedStops[0] ? sortedStops[0].name : 'Campus Gate');
-  const nextStopEta = activeTrip && latestLoc ? formatEta(nextStopInfo.etaMinutes || etaMinutes) : 'ETA unavailable';
+    liveEta?.nextStopName ||
+    nextStopInfo.nextStop?.name ||
+    stop?.name ||
+    (sortedStops[0] ? sortedStops[0].name : 'Campus Gate');
+  const nextStopEta = liveEta?.etaFormatted || (activeTrip && latestLoc ? formatEta(nextStopInfo.etaMinutes || etaMinutes) : 'ETA unavailable');
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -177,12 +189,12 @@ export default function StudentHomeScreen() {
             <View style={styles.arrivalBox}>
               <View style={styles.arrivalCol}>
                 <Text style={styles.arrivalLabel}>ARRIVING IN</Text>
-                <Text style={styles.arrivalValue}>{formatEta(etaMinutes)}</Text>
+                <Text style={styles.arrivalValue}>{displayEtaText}</Text>
               </View>
               <View style={styles.arrivalDivider} />
               <View style={styles.arrivalCol}>
                 <Text style={styles.arrivalLabel}>DISTANCE</Text>
-                <Text style={styles.distanceValue}>{formatDistance(distanceKm)}</Text>
+                <Text style={styles.distanceValue}>{displayDistanceText}</Text>
               </View>
             </View>
           ) : (

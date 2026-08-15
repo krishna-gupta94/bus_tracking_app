@@ -74,21 +74,56 @@ io.on('connection', (socket) => {
     longitude: number;
     tripId: string;
     busId: string;
+    speed?: number;
+    heading?: number;
+    accuracy?: number;
   }) => {
     try {
-      const { latitude, longitude, tripId, busId } = data;
+      const { latitude, longitude, tripId, busId, speed, heading, accuracy } = data;
       if (
         typeof latitude !== 'number' || typeof longitude !== 'number' ||
         !tripId || !busId
       ) return;
 
       if (tripId !== 'EMERGENCY') {
-        await prisma.busLocation.create({ data: { latitude, longitude, tripId, busId } });
+        await prisma.busLocation.create({
+          data: {
+            latitude,
+            longitude,
+            tripId,
+            busId,
+            speed: speed ?? null,
+            heading: heading ?? null,
+            accuracy: accuracy ?? null,
+          },
+        });
       }
 
-      const locationData = { busId, latitude, longitude, timestamp: new Date().toISOString(), tripId };
+      const locationData = {
+        busId,
+        latitude,
+        longitude,
+        speed,
+        heading,
+        accuracy,
+        timestamp: new Date().toISOString(),
+        tripId,
+      };
+
       io.to(`bus:${busId}`).emit('location:update', locationData);
       io.to('admin').emit('location:update', locationData);
+
+      // Trigger background ETA computation and broadcast
+      const { etaService } = await import('./services/etaService');
+      etaService
+        .calculateETA(busId)
+        .then((etaData) => {
+          io.to(`bus:${busId}`).emit('eta:update', etaData);
+          io.to('admin').emit('eta:update', etaData);
+        })
+        .catch((err) => {
+          console.error('[Socket] ETA calculation error:', err);
+        });
     } catch (err) {
       console.error('[Socket] location:send error:', err);
     }

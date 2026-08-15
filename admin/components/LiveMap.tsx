@@ -123,6 +123,7 @@ function MapViewController({
 export default function LiveMap() {
   const [trips, setTrips] = useState<ActiveTrip[]>([]);
   const [liveLocations, setLiveLocations] = useState<Map<string, BusLocation>>(new Map());
+  const [liveEtas, setLiveEtas] = useState<Map<string, any>>(new Map());
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string>('maptiler_streets');
   const [targetFly, setTargetFly] = useState<[number, number] | null>(null);
@@ -146,19 +147,32 @@ export default function LiveMap() {
       setTrips(activeTrips);
 
       const locMap = new Map<string, BusLocation>();
-      activeTrips.forEach((t) => {
-        if (t.locations && t.locations.length > 0) {
-          const last = t.locations[t.locations.length - 1];
-          locMap.set(t.bus.id, {
-            busId: t.bus.id,
-            latitude: last.latitude,
-            longitude: last.longitude,
-            timestamp: last.timestamp || new Date().toISOString(),
-            tripId: t.id,
-          });
-        }
-      });
+      const etaMap = new Map<string, any>();
+
+      await Promise.all(
+        activeTrips.map(async (t) => {
+          if (t.locations && t.locations.length > 0) {
+            const last = t.locations[t.locations.length - 1];
+            locMap.set(t.bus.id, {
+              busId: t.bus.id,
+              latitude: last.latitude,
+              longitude: last.longitude,
+              timestamp: last.timestamp || new Date().toISOString(),
+              tripId: t.id,
+            });
+          }
+
+          try {
+            const etaRes = await api.get(`/buses/${t.bus.id}/eta`);
+            if (etaRes.data.data) {
+              etaMap.set(t.bus.id, etaRes.data.data);
+            }
+          } catch (e) {}
+        })
+      );
+
       setLiveLocations(locMap);
+      setLiveEtas(etaMap);
     } catch (err) {
       console.error('Failed to load trips:', err);
     }
@@ -171,10 +185,13 @@ export default function LiveMap() {
     const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
+    socket.on('connect', () => {
+      setConnected(true);
+      socket.emit('join:admin');
+    });
     socket.on('disconnect', () => setConnected(false));
 
-    socket.on('location_update', (loc: BusLocation) => {
+    socket.on('location:update', (loc: BusLocation) => {
       setLiveLocations((prev) => {
         const next = new Map(prev);
         next.set(loc.busId, loc);
@@ -182,8 +199,18 @@ export default function LiveMap() {
       });
     });
 
-    socket.on('trip_started', () => fetchTrips());
-    socket.on('trip_ended', () => fetchTrips());
+    socket.on('eta:update', (eta: any) => {
+      if (eta && eta.busId) {
+        setLiveEtas((prev) => {
+          const next = new Map(prev);
+          next.set(eta.busId, eta);
+          return next;
+        });
+      }
+    });
+
+    socket.on('trip:started', () => fetchTrips());
+    socket.on('trip:ended', () => fetchTrips());
 
     return () => {
       socket.disconnect();
@@ -269,6 +296,16 @@ export default function LiveMap() {
             filteredTrips.map((trip) => {
               const isSelected = selectedBusId === trip.bus.id;
               const loc = liveLocations.get(trip.bus.id);
+              const eta = liveEtas.get(trip.bus.id);
+
+              const statusColor =
+                eta?.status === 'DELAYED'
+                  ? '#ef4444'
+                  : eta?.status === 'BUS_STOPPED'
+                  ? '#f59e0b'
+                  : eta?.status === 'SLIGHTLY_DELAYED'
+                  ? '#eab308'
+                  : '#10b981';
 
               return (
                 <div
@@ -287,19 +324,64 @@ export default function LiveMap() {
                     <span style={{ fontWeight: 700, fontSize: 14, color: '#38bdf8' }}>
                       🚌 {trip.bus?.busNumber}
                     </span>
-                    <span style={{ fontSize: 11, background: 'rgba(16,185,129,0.15)', color: '#10b981', padding: '2px 6px', borderRadius: 6, fontWeight: 600 }}>
-                      ON ROUTE
+                    <span
+                      style={{
+                        fontSize: 10,
+                        background: `${statusColor}20`,
+                        color: statusColor,
+                        border: `1px solid ${statusColor}40`,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {eta?.status ? eta.status.replace(/_/g, ' ') : 'ON ROUTE'}
                     </span>
                   </div>
 
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3 }}>
                     <strong>Driver:</strong> {trip.driver?.user?.name}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
                     <strong>Route:</strong> {trip.route?.name}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4 }}>
+                  {/* Real-time ETA Telemetry Box */}
+                  <div
+                    style={{
+                      background: 'rgba(15,23,42,0.6)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      marginBottom: 6,
+                      fontSize: 11,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Next Stop:</span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{eta?.nextStopName || 'In Transit'}</strong>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>ETA Arrival:</span>
+                      <strong style={{ color: '#38bdf8', fontWeight: 800 }}>
+                        {eta ? `${eta.etaFormatted} (${eta.distanceFormatted})` : 'Calculating...'}
+                      </strong>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Speed / Conf:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        {eta?.currentSpeedKmh !== undefined ? `${eta.currentSpeedKmh} km/h` : '--'} ·{' '}
+                        {eta?.confidence ? `${Math.round(eta.confidence * 100)}%` : 'AI Est'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)' }}>
                     <span>{trip.route?.stops?.length || 0} stops</span>
                     <span>{loc ? `Ping: ${new Date(loc.timestamp).toLocaleTimeString()}` : 'Awaiting GPS'}</span>
                   </div>
@@ -492,17 +574,42 @@ export default function LiveMap() {
                   }}
                 >
                   <Popup>
-                    <div style={{ fontSize: 13, minWidth: 160 }}>
-                      <h4 style={{ margin: '0 0 6px', color: '#0284c7', fontSize: 14 }}>
-                        🚌 Bus {busNumber}
-                      </h4>
-                      <p style={{ margin: '0 0 4px' }}>
+                    <div style={{ fontSize: 12, minWidth: 200, padding: 2 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <h4 style={{ margin: 0, color: '#0284c7', fontSize: 14 }}>
+                          🚌 Bus {busNumber}
+                        </h4>
+                        <span style={{ fontSize: 10, background: '#0ea5e920', color: '#0284c7', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                          {liveEtas.get(busId)?.status ? liveEtas.get(busId).status.replace(/_/g, ' ') : 'LIVE'}
+                        </span>
+                      </div>
+
+                      <p style={{ margin: '0 0 3px' }}>
                         <strong>Driver:</strong> {trip?.driver?.user?.name || 'Assigned'}
                       </p>
-                      <p style={{ margin: '0 0 4px' }}>
+                      <p style={{ margin: '0 0 3px' }}>
                         <strong>Route:</strong> {trip?.route?.name || 'Campus'}
                       </p>
-                      <p style={{ margin: 0, fontSize: 11, color: '#64748b' }}>
+
+                      {/* ETA Details in Popup */}
+                      {liveEtas.get(busId) && (
+                        <div style={{ background: '#f8fafc', padding: 6, borderRadius: 6, margin: '6px 0', border: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#334155' }}>
+                            <span>Next Stop:</span>
+                            <strong>{liveEtas.get(busId).nextStopName}</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0284c7', marginTop: 2 }}>
+                            <span>ETA:</span>
+                            <strong>{liveEtas.get(busId).etaFormatted} ({liveEtas.get(busId).distanceFormatted})</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: 10, marginTop: 2 }}>
+                            <span>Speed / Conf:</span>
+                            <span>{liveEtas.get(busId).currentSpeedKmh} km/h · {Math.round((liveEtas.get(busId).confidence || 0.85) * 100)}%</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>
                         <strong>Ping:</strong> {new Date(loc.timestamp).toLocaleTimeString()}
                       </p>
                     </div>

@@ -11,6 +11,32 @@ export interface Stop {
   sequence: number;
 }
 
+export interface ETAPredictionData {
+  busId: string;
+  busNumber: string;
+  tripId: string | null;
+  routeId: string;
+  routeName: string;
+  targetStopId: string;
+  targetStopName: string;
+  nextStopId: string | null;
+  nextStopName: string;
+  etaMinutes: number;
+  etaSeconds: number;
+  etaFormatted: string;
+  etaDisplayText: string;
+  distanceMeters: number;
+  distanceFormatted: string;
+  currentSpeedKmh: number;
+  effectiveSpeedKmh: number;
+  confidence: number;
+  confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  status: 'ON_TIME' | 'SLIGHTLY_DELAYED' | 'DELAYED' | 'BUS_STOPPED' | 'GPS_UNAVAILABLE' | 'OFFLINE';
+  lastUpdatedSecondsAgo: number;
+  stopsRemaining: number;
+  updatedAt: string;
+}
+
 // Haversine Distance in Kilometers
 export function calculateDistanceKm(
   lat1: number,

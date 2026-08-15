@@ -1,0 +1,42 @@
+{
+  "model_type": "XGBRegressor",
+  "version": "1.0.0",
+  "feature_names": [
+    "remaining_distance_meters",
+    "current_speed_kmh",
+    "effective_speed_kmh",
+    "historical_avg_segment_time_sec",
+    "day_of_week",
+    "hour_of_day",
+    "minute_of_hour",
+    "is_peak_hour",
+    "is_weekend",
+    "stops_remaining",
+    "progress_ratio",
+    "traffic_congestion_factor"
+  ],
+  "n_estimators": 100,
+  "max_depth": 5,
+  "learning_rate": 0.08,
+  "metrics": {
+    "r2_score": 0.9978367381827284,
+    "mae_seconds": 49.1035276689013,
+    "mae_minutes": 0.8183921278150217
+  },
+  "feature_importances": {
+    "remaining_distance_meters": 0.4355713129043579,
+    "historical_avg_segment_time_sec": 0.2652340829372406,
+    "effective_speed_kmh": 0.12259631603956223,
+    "traffic_congestion_factor": 0.0602293461561203,
+    "stops_remaining": 0.060073789209127426,
+    "is_peak_hour": 0.03565031290054321,
+    "current_speed_kmh": 0.017148833721876144,
+    "is_weekend": 0.0028665338177233934,
+    "hour_of_day": 0.00025228169397450984,
+    "minute_of_hour": 0.00013961715740151703,
+    "progress_ratio": 0.0001316853886237368,
+    "day_of_week": 0.00010591020691208541
+  },
+  "default_free_flow_speed_kmh": 32.0,
+  "min_reasonable_speed_kmh": 12.0
+}

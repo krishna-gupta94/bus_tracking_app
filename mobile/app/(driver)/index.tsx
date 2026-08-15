@@ -120,26 +120,27 @@ export default function DriverHomeScreen() {
           distanceInterval: 5,
         },
         (loc) => {
-          const { latitude, longitude } = loc.coords;
+          const { latitude, longitude, speed, heading, accuracy } = loc.coords;
           setCurrentCoords({ latitude, longitude });
           setUpdateCount((c) => c + 1);
 
-          mobileApi
-            .post('/locations/update', {
-              latitude,
-              longitude,
-              tripId,
-              busId,
-            })
-            .catch(() => {});
+          // Convert speed from m/s to km/h (if available)
+          const speedKmh = typeof speed === 'number' && speed >= 0 ? Math.round(speed * 3.6 * 10) / 10 : undefined;
+
+          const payload = {
+            latitude,
+            longitude,
+            tripId,
+            busId,
+            speed: speedKmh,
+            heading: typeof heading === 'number' ? Math.round(heading) : undefined,
+            accuracy: typeof accuracy === 'number' ? Math.round(accuracy) : undefined,
+          };
+
+          mobileApi.post('/locations/update', payload).catch(() => {});
 
           if (socketRef.current?.connected) {
-            socketRef.current.emit('location:send', {
-              latitude,
-              longitude,
-              tripId,
-              busId,
-            });
+            socketRef.current.emit('location:send', payload);
           }
         }
       );

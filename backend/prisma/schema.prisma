@@ -96,10 +96,11 @@ model Route {
   description String?
   status      String  @default("ACTIVE")
 
-  stops    Stop[]
-  buses    Bus[]
-  trips    Trip[]
-  students Student[] @relation("StudentRoute")
+  stops             Stop[]
+  buses             Bus[]
+  trips             Trip[]
+  students          Student[]                 @relation("StudentRoute")
+  historicalMetrics HistoricalSegmentMetric[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -156,6 +157,9 @@ model BusLocation {
   id        String   @id @default(cuid())
   latitude  Float
   longitude Float
+  speed     Float?   // Speed in km/h
+  heading   Float?   // Bearing in degrees
+  accuracy  Float?   // Accuracy in meters
   timestamp DateTime @default(now())
 
   trip   Trip   @relation(fields: [tripId], references: [id])
@@ -166,6 +170,26 @@ model BusLocation {
 
   @@index([busId, timestamp])
   @@map("bus_locations")
+}
+
+model HistoricalSegmentMetric {
+  id                String   @id @default(cuid())
+  routeId           String
+  fromStopId        String?
+  toStopId          String
+  dayOfWeek         Int      // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  hourOfDay         Int      // 0 - 23
+  distanceMeters    Float
+  travelTimeSeconds Float    // Moving average of segment transit duration
+  averageSpeedKmh   Float
+  sampleCount       Int      @default(1)
+  updatedAt         DateTime @updatedAt
+
+  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, toStopId, dayOfWeek, hourOfDay])
+  @@index([routeId, toStopId])
+  @@map("historical_segment_metrics")
 }
 
 model Notification {
