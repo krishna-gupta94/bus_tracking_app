@@ -10,20 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "config": {
-        "googleMapsApiKey": "AIzaSyAxwF8dhIapt8Oo04f1Niip6-b_O0gOaCU"
-      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "BusTracker uses your location to show your position on the transit map, identify your nearest bus stop, and provide accurate arrival estimates.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "BusTracker uses background location for drivers during active bus trips to broadcast coordinates."
       }
     },
     "android": {
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyAxwF8dhIapt8Oo04f1Niip6-b_O0gOaCU"
-        }
-      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0a0e1a"

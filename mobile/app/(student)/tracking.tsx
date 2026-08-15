@@ -9,14 +9,13 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import MapView, { Marker, Polyline, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
+import { MapTilerView, MapTilerViewRef } from '../../src/components/MapTilerView';
 import { useAuth } from '../../src/context/AuthContext';
 import { mobileApi } from '../../src/services/api';
 import { io, Socket } from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { colors, shadows } from '../../src/theme/colors';
-import { MAPTILER_TILES } from '../../src/config/maptiler';
 import { StatusBadge } from '../../src/components/StatusBadge';
 import { EmergencyModal } from '../../src/components/EmergencyModal';
 import { BusDetailsModal } from '../../src/components/BusDetailsModal';
@@ -36,6 +35,9 @@ interface LocationData {
   busId: string;
   latitude: number;
   longitude: number;
+  speed?: number;
+  heading?: number;
+  accuracy?: number;
   timestamp: string;
   tripId: string;
 }
@@ -52,8 +54,9 @@ export default function StudentTrackingScreen() {
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [showBusDetails, setShowBusDetails] = useState(false);
   const [dismissPermissionBanner, setDismissPermissionBanner] = useState(false);
+  const [mapTileStyle, setMapTileStyle] = useState<'streets' | 'dark' | 'hybrid' | 'outdoor'>('streets');
 
-  const mapRef = useRef<MapView | null>(null);
+  const mapTilerRef = useRef<MapTilerViewRef | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   // Centralized Student Location Permission Hook
@@ -259,77 +262,22 @@ export default function StudentTrackingScreen() {
     }
   }, [busLocation, assignedStop, activeTrip, isBusGpsUnavailable, voiceAlertPlayed, bus?.busNumber]);
 
-  // Camera Handlers
+  // Camera Handlers using MapTiler Engine
   const centerOnBus = useCallback(() => {
-    if (busLocation && mapRef.current) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: busLocation.latitude,
-          longitude: busLocation.longitude,
-          latitudeDelta: 0.018,
-          longitudeDelta: 0.018,
-        },
-        700
-      );
-    }
-  }, [busLocation]);
+    mapTilerRef.current?.centerOnBus();
+  }, []);
 
   const centerOnUser = useCallback(async () => {
     if (permissionState !== 'GRANTED') {
       const granted = await requestPermission();
       if (!granted) return;
     }
-
-    const targetCoords = userLocation || (await refreshLocation());
-    if (targetCoords && mapRef.current) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: targetCoords.latitude,
-          longitude: targetCoords.longitude,
-          latitudeDelta: 0.018,
-          longitudeDelta: 0.018,
-        },
-        700
-      );
-    } else if (assignedStop && mapRef.current) {
-      mapRef.current.animateToRegion(
-        {
-          latitude: assignedStop.latitude,
-          longitude: assignedStop.longitude,
-          latitudeDelta: 0.018,
-          longitudeDelta: 0.018,
-        },
-        700
-      );
-    }
-  }, [permissionState, userLocation, requestPermission, refreshLocation, assignedStop]);
+    mapTilerRef.current?.centerOnUser();
+  }, [permissionState, requestPermission]);
 
   const fitAllMarkers = useCallback(() => {
-    if (!mapRef.current) return;
-    const coords: { latitude: number; longitude: number }[] = [];
-
-    if (busLocation) {
-      coords.push({ latitude: busLocation.latitude, longitude: busLocation.longitude });
-    }
-    if (userLocation) {
-      coords.push({ latitude: userLocation.latitude, longitude: userLocation.longitude });
-    }
-    stops.forEach((s) => coords.push({ latitude: s.latitude, longitude: s.longitude }));
-
-    if (coords.length > 1) {
-      mapRef.current.fitToCoordinates(coords, {
-        edgePadding: { top: 70, right: 60, bottom: 180, left: 60 },
-        animated: true,
-      });
-    } else if (coords.length === 1) {
-      mapRef.current.animateToRegion({
-        latitude: coords[0].latitude,
-        longitude: coords[0].longitude,
-        latitudeDelta: 0.025,
-        longitudeDelta: 0.025,
-      });
-    }
-  }, [busLocation, userLocation, stops]);
+    mapTilerRef.current?.fitAllMarkers();
+  }, []);
 
   const routeCoordinates = useMemo(() => {
     return stops.map((s) => ({
@@ -478,85 +426,18 @@ export default function StudentTrackingScreen() {
         </View>
       ) : (
         <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_DEFAULT}
+          {/* MapTiler High-Performance Interactive Map Engine */}
+          <MapTilerView
+            ref={mapTilerRef}
+            busLocation={busLocation}
+            userLocation={userLocation}
+            stops={stops}
+            assignedStop={assignedStop}
+            busNumber={bus?.busNumber || '24'}
+            mapStyle={mapTileStyle}
+            onBusPress={() => setShowBusDetails(true)}
             style={styles.map}
-            initialRegion={initialRegion}
-            showsUserLocation={false}
-            showsMyLocationButton={false}
-            mapType="standard"
-          >
-            {/* MapTiler Tile Layer */}
-            <UrlTile
-              urlTemplate={MAPTILER_TILES.streets}
-              maximumZ={19}
-              tileSize={256}
-              shouldReplaceMapContent={true}
-              flipY={false}
-              zIndex={1}
-            />
-
-            {/* Route Polyline */}
-            {routeCoordinates.length > 1 && (
-              <Polyline
-                coordinates={routeCoordinates}
-                strokeColor={colors.primary}
-                strokeWidth={4}
-              />
-            )}
-
-            {/* Route Stops */}
-            {stops.map((s) => {
-              const isAssigned = assignedStop?.id === s.id;
-              return (
-                <Marker
-                  key={s.id}
-                  coordinate={{ latitude: s.latitude, longitude: s.longitude }}
-                  title={`${s.sequence}. ${s.name}`}
-                  description={isAssigned ? 'YOUR ASSIGNED STOP' : 'Campus Route Stop'}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                >
-                  <View style={[styles.stopMarkerCircle, isAssigned && styles.stopMarkerCircleAssigned]}>
-                    <Text style={[styles.stopMarkerText, isAssigned && styles.stopMarkerTextAssigned]}>
-                      {s.sequence}
-                    </Text>
-                  </View>
-                </Marker>
-              );
-            })}
-
-            {/* Student Custom Marker (when permission granted & coordinates available) */}
-            {userLocation && (
-              <Marker
-                coordinate={{
-                  latitude: userLocation.latitude,
-                  longitude: userLocation.longitude,
-                }}
-                title="Your Location"
-                description="You are here"
-                anchor={{ x: 0.5, y: 0.5 }}
-              >
-                <View style={styles.studentLocationRing}>
-                  <View style={styles.studentLocationDot} />
-                </View>
-              </Marker>
-            )}
-
-            {/* Live Bus Marker */}
-            {busLocation && (
-              <Marker
-                coordinate={{ latitude: busLocation.latitude, longitude: busLocation.longitude }}
-                title={`BUS ${bus?.busNumber || ''}`}
-                description={`GPS Updated: ${new Date(busLocation.timestamp).toLocaleTimeString()}`}
-                anchor={{ x: 0.5, y: 0.5 }}
-              >
-                <View style={[styles.busMarkerCircle, shadows.primaryGlow]}>
-                  <Text style={{ fontSize: 18 }}>🚌</Text>
-                </View>
-              </Marker>
-            )}
-          </MapView>
+          />
 
           {/* Floating Action Controls */}
           <View style={styles.floatingControls}>
@@ -591,6 +472,28 @@ export default function StudentTrackingScreen() {
               accessibilityLabel="Fit Route View"
             >
               <Ionicons name="scan-outline" size={20} color={colors.textPrimary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.controlBtn, shadows.md]}
+              onPress={() => {
+                const nextStyle =
+                  mapTileStyle === 'streets'
+                    ? 'hybrid'
+                    : mapTileStyle === 'hybrid'
+                    ? 'dark'
+                    : 'streets';
+                setMapTileStyle(nextStyle);
+                mapTilerRef.current?.setMapStyle(nextStyle);
+              }}
+              activeOpacity={0.85}
+              accessibilityLabel="Switch Map Style"
+            >
+              <Ionicons
+                name={mapTileStyle === 'hybrid' ? 'earth' : mapTileStyle === 'dark' ? 'moon' : 'map-outline'}
+                size={20}
+                color={colors.primary}
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
