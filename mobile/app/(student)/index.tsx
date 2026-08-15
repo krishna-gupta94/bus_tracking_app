@@ -254,6 +254,11 @@ export default function StudentHomeScreen() {
               <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
               <Text style={styles.userStopText}>
                 Your Assigned Stop: <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>{stop.sequence}. {stop.name}</Text>
+                {userLocation && (
+                  <Text style={{ color: colors.textSecondary, fontWeight: '500' }}>
+                    {' '}· {formatDistance(calculateDistanceKm(userLocation.latitude, userLocation.longitude, stop.latitude, stop.longitude))}
+                  </Text>
+                )}
               </Text>
             </View>
           )}

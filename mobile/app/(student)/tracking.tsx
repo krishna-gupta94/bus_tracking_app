@@ -155,6 +155,17 @@ export default function StudentTrackingScreen() {
     };
   }, [bus?.id, loadData, serverUrl]);
 
+  // Student location to assigned stop or nearest stop distance calculation
+  const studentToAssignedDistKm = useMemo(() => {
+    if (!userLocation || !assignedStop) return null;
+    return calculateDistanceKm(
+      userLocation.latitude,
+      userLocation.longitude,
+      assignedStop.latitude,
+      assignedStop.longitude
+    );
+  }, [userLocation, assignedStop]);
+
   // Geographically nearest stop to the student (computed only if student GPS is available)
   const nearestStopToStudent = useMemo(() => {
     if (!userLocation || stops.length === 0) return null;
@@ -167,6 +178,24 @@ export default function StudentTrackingScreen() {
     return getNextStop(busLocation.latitude, busLocation.longitude, stops);
   }, [busLocation, stops]);
 
+  // Bus GPS Freshness calculation
+  const gpsAgeSeconds = useMemo(() => {
+    if (!busLocation?.timestamp) return Infinity;
+    return Math.max(0, Math.round((Date.now() - new Date(busLocation.timestamp).getTime()) / 1000));
+  }, [busLocation?.timestamp]);
+
+  const isBusGpsFresh = Boolean(activeTrip && busLocation && gpsAgeSeconds <= 75);
+  const isBusGpsStale = Boolean(activeTrip && busLocation && gpsAgeSeconds > 75 && gpsAgeSeconds <= 180);
+  const isBusGpsUnavailable = !activeTrip || !busLocation || gpsAgeSeconds > 180;
+
+  const computedBusStatus = useMemo(() => {
+    if (!activeTrip) return 'OFFLINE';
+    if (isBusGpsUnavailable) return 'GPS_UNAVAILABLE';
+    if (isBusGpsStale) return 'SLIGHTLY_DELAYED';
+    if (busLocation?.speed !== undefined && busLocation.speed < 3) return 'BUS_STOPPED';
+    return liveEta?.status || 'ON_TIME';
+  }, [activeTrip, isBusGpsUnavailable, isBusGpsStale, busLocation?.speed, liveEta?.status]);
+
   // Target Stop & ETA display strings (prioritize backend XGBoost ETA with local fallback)
   const displayNextStopName =
     liveEta?.nextStopName ||
@@ -175,8 +204,11 @@ export default function StudentTrackingScreen() {
     (stops[0] ? stops[0].name : 'In Transit');
 
   const displayEtaText = useMemo(() => {
-    if (!activeTrip || !busLocation) {
+    if (!activeTrip) {
       return 'OFFLINE';
+    }
+    if (isBusGpsUnavailable) {
+      return 'GPS UNAVAILABLE';
     }
     if (liveEta?.etaFormatted) {
       return liveEta.etaFormatted;
@@ -185,11 +217,14 @@ export default function StudentTrackingScreen() {
       return formatEta(nextStopInfo.etaMinutes);
     }
     return 'CALCULATING...';
-  }, [activeTrip, busLocation, liveEta, nextStopInfo]);
+  }, [activeTrip, isBusGpsUnavailable, liveEta, nextStopInfo]);
 
   const displayDistanceText = useMemo(() => {
-    if (!activeTrip || !busLocation) {
+    if (!activeTrip) {
       return 'Bus Offline';
+    }
+    if (isBusGpsUnavailable) {
+      return 'GPS Unavailable';
     }
     if (liveEta?.distanceFormatted) {
       return liveEta.distanceFormatted;
@@ -198,11 +233,11 @@ export default function StudentTrackingScreen() {
       return formatDistance(nextStopInfo.distanceKm);
     }
     return 'Tracking...';
-  }, [activeTrip, busLocation, liveEta, nextStopInfo]);
+  }, [activeTrip, isBusGpsUnavailable, liveEta, nextStopInfo]);
 
   // Proximity Alert Trigger for Assigned Stop
   useEffect(() => {
-    if (voiceAlertPlayed || !busLocation || !assignedStop || !activeTrip) return;
+    if (voiceAlertPlayed || !busLocation || !assignedStop || !activeTrip || isBusGpsUnavailable) return;
 
     const directDistKm = calculateDistanceKm(
       busLocation.latitude,
@@ -222,7 +257,7 @@ export default function StudentTrackingScreen() {
         rate: 0.95,
       });
     }
-  }, [busLocation, assignedStop, activeTrip, voiceAlertPlayed, bus?.busNumber]);
+  }, [busLocation, assignedStop, activeTrip, isBusGpsUnavailable, voiceAlertPlayed, bus?.busNumber]);
 
   // Camera Handlers
   const centerOnBus = useCallback(() => {
@@ -310,21 +345,21 @@ export default function StudentTrackingScreen() {
 
     return {
       latitude:
-        busLocation?.latitude ||
         userLocation?.latitude ||
         assignedStop?.latitude ||
+        busLocation?.latitude ||
         stops[0]?.latitude ||
         defaultLat,
       longitude:
-        busLocation?.longitude ||
         userLocation?.longitude ||
         assignedStop?.longitude ||
+        busLocation?.longitude ||
         stops[0]?.longitude ||
         defaultLon,
       latitudeDelta: 0.045,
       longitudeDelta: 0.045,
     };
-  }, [busLocation, userLocation, assignedStop, stops]);
+  }, [userLocation, assignedStop, busLocation, stops]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -343,7 +378,7 @@ export default function StudentTrackingScreen() {
         </View>
 
         <View style={styles.headerRight}>
-          <StatusBadge status={activeTrip ? 'LIVE' : 'NOT STARTED'} size="sm" />
+          <StatusBadge status={isBusGpsFresh ? 'LIVE' : activeTrip ? 'ON_TIME' : 'INACTIVE'} size="sm" />
           <TouchableOpacity
             style={styles.sosHeaderBtn}
             onPress={() => setShowSOSModal(true)}
@@ -406,7 +441,7 @@ export default function StudentTrackingScreen() {
                 ? 'Turn on device location services to view your position and nearest stops.'
                 : permissionState === 'BLOCKED'
                 ? 'Location access was blocked. Open device settings to allow location.'
-                : 'Location access helps show your position, find your nearest stop, and provide accurate arrival information.'}
+                : 'Location permission is required for accurate location-based ETA and nearest-stop information.'}
             </Text>
 
             <View style={styles.permissionActionsRow}>
@@ -448,15 +483,18 @@ export default function StudentTrackingScreen() {
             provider={PROVIDER_DEFAULT}
             style={styles.map}
             initialRegion={initialRegion}
-            showsUserLocation={permissionState === 'GRANTED'}
+            showsUserLocation={false}
             showsMyLocationButton={false}
+            mapType="standard"
           >
             {/* MapTiler Tile Layer */}
             <UrlTile
               urlTemplate={MAPTILER_TILES.streets}
               maximumZ={19}
+              tileSize={256}
+              shouldReplaceMapContent={true}
               flipY={false}
-              zIndex={-1}
+              zIndex={1}
             />
 
             {/* Route Polyline */}
@@ -575,17 +613,28 @@ export default function StudentTrackingScreen() {
                     BUS {bus?.busNumber || '24'}
                   </Text>
                 </View>
-                {activeTrip && busLocation && (
+                {isBusGpsFresh ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,185,129,0.12)', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 12 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success }} />
                     <Text style={{ color: colors.success, fontSize: 10, fontWeight: '800' }}>LIVE</Text>
+                  </View>
+                ) : isBusGpsStale ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(234,179,8,0.12)', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 12 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warning }} />
+                    <Text style={{ color: colors.warning, fontSize: 10, fontWeight: '800' }}>GPS STALE</Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(239,68,68,0.12)', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 12 }}>
+                    <Text style={{ color: colors.danger, fontSize: 10, fontWeight: '800' }}>
+                      {activeTrip ? 'GPS UNAVAILABLE' : 'OFFLINE'}
+                    </Text>
                   </View>
                 )}
               </View>
 
               {/* Status and Confidence */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {liveEta?.confidence ? (
+                {liveEta?.confidence && isBusGpsFresh ? (
                   <View style={{ backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                     <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700' }}>
                       {Math.round(liveEta.confidence * 100)}% Conf
@@ -593,11 +642,7 @@ export default function StudentTrackingScreen() {
                   </View>
                 ) : null}
 
-                {liveEta?.status ? (
-                  <StatusBadge status={liveEta.status} />
-                ) : (
-                  <StatusBadge status={activeTrip ? 'ON_TIME' : 'INACTIVE'} />
-                )}
+                <StatusBadge status={computedBusStatus} />
               </View>
             </View>
 
@@ -614,14 +659,14 @@ export default function StudentTrackingScreen() {
               <View
                 style={[
                   styles.etaBox,
-                  (!activeTrip || !busLocation) && styles.etaBoxInactive,
+                  (!activeTrip || isBusGpsUnavailable) && styles.etaBoxInactive,
                 ]}
               >
                 <Text style={styles.etaLabel}>ARRIVING IN</Text>
                 <Text
                   style={[
                     styles.etaVal,
-                    (!activeTrip || !busLocation) && styles.etaValInactive,
+                    (!activeTrip || isBusGpsUnavailable) && styles.etaValInactive,
                   ]}
                 >
                   {displayEtaText}
@@ -629,18 +674,40 @@ export default function StudentTrackingScreen() {
               </View>
             </View>
 
-            {/* Nearest Stop Info (if student GPS is available) */}
-            {nearestStopToStudent?.stop && (
+            {/* Student Walking / Nearest Stop Distance Information */}
+            {userLocation && studentToAssignedDistKm !== null && assignedStop ? (
               <View style={styles.nearestStopRow}>
                 <Ionicons name="walk-outline" size={14} color={colors.primary} />
                 <Text style={styles.nearestStopText}>
-                  Nearest Stop:{' '}
+                  Your Location → Assigned Stop:{' '}
+                  <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
+                    {assignedStop.name}
+                  </Text>{' '}
+                  ({formatDistance(studentToAssignedDistKm)})
+                </Text>
+              </View>
+            ) : userLocation && nearestStopToStudent?.stop ? (
+              <View style={styles.nearestStopRow}>
+                <Ionicons name="walk-outline" size={14} color={colors.primary} />
+                <Text style={styles.nearestStopText}>
+                  Your Location → Nearest Stop:{' '}
                   <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
                     {nearestStopToStudent.stop.name}
                   </Text>{' '}
                   ({formatDistance(nearestStopToStudent.distanceKm)})
                 </Text>
               </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.nearestStopRow}
+                onPress={requestPermission}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="location-outline" size={14} color={colors.warning} />
+                <Text style={[styles.nearestStopText, { color: colors.warning }]}>
+                  Enable location for accurate walking distance & stop detection
+                </Text>
+              </TouchableOpacity>
             )}
 
             <View style={styles.bottomMetaRow}>
@@ -654,9 +721,9 @@ export default function StudentTrackingScreen() {
               <View style={styles.metaItem}>
                 <Ionicons name="speedometer-outline" size={14} color={colors.textMuted} />
                 <Text style={styles.metaText}>
-                  {liveEta?.currentSpeedKmh !== undefined
+                  {liveEta?.currentSpeedKmh !== undefined && isBusGpsFresh
                     ? `${liveEta.currentSpeedKmh} km/h`
-                    : '24 km/h'}
+                    : '-- km/h'}
                 </Text>
               </View>
 
@@ -666,12 +733,14 @@ export default function StudentTrackingScreen() {
                 <Ionicons
                   name="radio-outline"
                   size={14}
-                  color={busLocation ? colors.success : colors.textMuted}
+                  color={isBusGpsFresh ? colors.success : isBusGpsStale ? colors.warning : colors.textMuted}
                 />
                 <Text style={styles.metaText}>
-                  {busLocation
-                    ? `Live (${new Date(busLocation.timestamp).toLocaleTimeString()})`
-                    : 'Awaiting GPS'}
+                  {isBusGpsFresh
+                    ? `Live (${new Date(busLocation!.timestamp).toLocaleTimeString()})`
+                    : isBusGpsStale
+                    ? `Stale (${gpsAgeSeconds}s ago)`
+                    : 'GPS Unavailable'}
                 </Text>
               </View>
             </View>

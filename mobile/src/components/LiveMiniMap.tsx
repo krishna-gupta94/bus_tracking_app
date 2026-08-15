@@ -61,8 +61,10 @@ export function LiveMiniMap({
           <UrlTile
             urlTemplate={MAPTILER_TILES.streets}
             maximumZ={19}
+            tileSize={256}
+            shouldReplaceMapContent={true}
             flipY={false}
-            zIndex={-1}
+            zIndex={1}
           />
           {/* Polyline */}
           {routeCoordinates.length > 1 && (

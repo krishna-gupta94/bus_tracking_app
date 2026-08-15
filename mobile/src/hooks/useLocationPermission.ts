@@ -210,12 +210,92 @@ export function useLocationPermission(autoCheck = true): UseLocationPermissionRe
     }
   }, []);
 
-  // Initial check on mount
+  // Initial check and auto-request on mount
   useEffect(() => {
-    if (autoCheck) {
-      checkPermission();
-    }
-  }, [autoCheck, checkPermission]);
+    if (!autoCheck) return;
+
+    let mounted = true;
+    (async () => {
+      try {
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          if (mounted) {
+            setPermissionState('SERVICES_DISABLED');
+            setErrorMessage('Location services (GPS) are turned off. Please enable device GPS.');
+          }
+          return;
+        }
+
+        const { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
+        if (status === Location.PermissionStatus.GRANTED) {
+          if (mounted) setPermissionState('GRANTED');
+          await fetchCurrentLocation();
+        } else if (status === Location.PermissionStatus.UNDETERMINED || canAskAgain) {
+          // Prompt user automatically on first entry
+          const req = await Location.requestForegroundPermissionsAsync();
+          if (req.status === Location.PermissionStatus.GRANTED) {
+            if (mounted) setPermissionState('GRANTED');
+            await fetchCurrentLocation();
+          } else {
+            if (mounted) {
+              setPermissionState(req.canAskAgain ? 'DENIED' : 'BLOCKED');
+              setErrorMessage('Location permission is required for accurate location-based ETA and nearest-stop information.');
+            }
+          }
+        } else {
+          if (mounted) {
+            setPermissionState('BLOCKED');
+            setErrorMessage('Location permission was permanently disabled. Please allow permission from App Settings.');
+          }
+        }
+      } catch (e: any) {
+        if (mounted) {
+          setPermissionState('ERROR');
+          setErrorMessage(e?.message || 'Error checking location permissions');
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [autoCheck, fetchCurrentLocation]);
+
+  // Foreground position watcher while component is active and permission is GRANTED
+  useEffect(() => {
+    if (permissionState !== 'GRANTED') return;
+
+    let sub: Location.LocationSubscription | null = null;
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 6000,
+        distanceInterval: 10,
+      },
+      (loc) => {
+        if (isMountedRef.current) {
+          setUserLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            accuracy: loc.coords.accuracy,
+            timestamp: loc.timestamp,
+          });
+        }
+      }
+    ).then((s) => {
+      sub = s;
+      watcherSubscriptionRef.current = s;
+    }).catch((err) => {
+      console.log('[useLocationPermission] watchPositionAsync error:', err);
+    });
+
+    return () => {
+      if (sub) {
+        sub.remove();
+        watcherSubscriptionRef.current = null;
+      }
+    };
+  }, [permissionState]);
 
   return {
     permissionState,
