@@ -16,7 +16,17 @@ export type BoardingStatus =
   | 'BOARDED_OTHER_ROUTE_BUS'
   | 'LIKELY_BOARDED'
   | 'NOT_BOARDED'
-  | 'UNKNOWN';
+  | 'UNKNOWN'
+  // New conflict detection statuses
+  | 'PENDING_CONFIRMATION'
+  | 'STUDENT_CONFIRMED'
+  | 'STUDENT_DECLINED'
+  | 'GPS_LIKELY_BOARDED'
+  | 'CONFLICT'
+  | 'BOARDED_CONFIRMED'
+  | 'NOT_BOARDED_CONFIRMED'
+  | 'NO_RESPONSE'
+  | 'VERIFICATION_INCOMPLETE';
 
 export interface BoardingStatusData {
   studentId: string;

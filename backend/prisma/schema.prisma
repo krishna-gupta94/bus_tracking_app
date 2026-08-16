@@ -213,11 +213,47 @@ model BoardingEvent {
   tripId             String?
   routeId            String
   stopId             String?
-  status             String    @default("UNKNOWN") // BOARDED_ASSIGNED_ROUTE_BUS | BOARDED_OTHER_ROUTE_BUS | LIKELY_BOARDED | NOT_BOARDED | UNKNOWN
+
+  // === Core Detection Fields (preserved) ===
+  status             String    @default("UNKNOWN")
+  // Valid: PENDING_CONFIRMATION | STUDENT_CONFIRMED | STUDENT_DECLINED
+  //        | GPS_LIKELY_BOARDED | CONFLICT
+  //        | BOARDED_CONFIRMED | NOT_BOARDED_CONFIRMED
+  //        | NO_RESPONSE | VERIFICATION_INCOMPLETE | UNKNOWN
+  //        | BOARDED_ASSIGNED_ROUTE_BUS | BOARDED_OTHER_ROUTE_BUS  (legacy)
+  //        | LIKELY_BOARDED | NOT_BOARDED  (legacy)
   confidence         Int       @default(0)         // 0 - 100
   detectedBusNumber  String?
   notes              String?
   verifiedAt         DateTime?
+
+  // === Student Response Tracking ===
+  studentResponse    String?   // 'YES' | 'NO' | null (no response)
+  respondedAt        DateTime? // When student tapped YES/NO
+
+  // === GPS Inference (separate from student response) ===
+  gpsInference       String?   // 'LIKELY_BOARDED' | 'NOT_BOARDED' | 'INSUFFICIENT_DATA'
+  gpsConfidence      Int       @default(0) // 0-100, GPS-only confidence score
+  gpsEvidenceSummary String?   // Human-readable: "Moved 2.1km with bus over 180s, heading ±12°"
+
+  // === Confirmation Source ===
+  confirmationSource String?   // 'STUDENT_YES' | 'STUDENT_NO_GPS_AGREE' | 'ADMIN_REVIEW'
+                               // | 'GPS_AUTO' | 'NO_RESPONSE_GPS' | 'STUDENT_NO_GPS_INCONCLUSIVE'
+                               // | 'VERIFICATION_INCOMPLETE'
+
+  // === Admin Resolution ===
+  resolvedBy         String?   // Admin user.id who resolved a CONFLICT
+  resolvedAt         DateTime? // When admin resolved
+  previousStatus     String?   // Status before admin override (audit trail)
+
+  // === Verification Window ===
+  verificationExpiresAt DateTime? // When post-decline GPS monitoring ends
+
+  // === Dedup Key (strict: requires tripId + busId + stopId all non-null) ===
+  eventKey           String?   @unique
+  // Format: "s:{studentId}:t:{tripId}:b:{busId}:st:{stopId}"
+  // Set on create only, never mutated.
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -229,6 +265,7 @@ model BoardingEvent {
   @@index([studentId, createdAt])
   @@index([routeId, createdAt])
   @@index([busId, createdAt])
+  @@index([status, createdAt])
   @@map("boarding_events")
 }
 

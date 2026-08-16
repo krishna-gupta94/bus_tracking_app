@@ -1,13 +1,55 @@
 import { prisma } from '../prisma/client';
 import { haversineDistanceMeters } from './routingService';
 import { Server as SocketServer } from 'socket.io';
+import { BOARDING_CONFIG, generateEventKey, TERMINAL_STATUSES, calculateBearing, headingDifference } from './boardingConfig';
 
 export type BoardingStatus =
   | 'BOARDED_ASSIGNED_ROUTE_BUS'
   | 'BOARDED_OTHER_ROUTE_BUS'
   | 'LIKELY_BOARDED'
   | 'NOT_BOARDED'
-  | 'UNKNOWN';
+  | 'UNKNOWN'
+  | 'PENDING_CONFIRMATION'
+  | 'BOARDED_CONFIRMED'
+  | 'STUDENT_DECLINED'
+  | 'VERIFICATION_INCOMPLETE'
+  | 'NOT_BOARDED_CONFIRMED'
+  | 'CONFLICT';
+
+export interface StopDepartureTracker {
+  busId: string;
+  stopId: string;
+  tripId: string;
+  routeId: string;
+  stopSequence: number;
+  nextStopInSequence: {
+    id: string;
+    latitude: number;
+    longitude: number;
+    sequence: number;
+  } | null;
+  wasNearStop: boolean;
+  recentUpdates: {
+    distanceFromStopM: number;
+    speedKmh: number;
+    headingDeg: number | null;
+    timestamp: number;
+  }[];
+  departed: boolean;
+  promptSent: boolean;
+}
+
+interface ActiveVerification {
+  eventId: string;
+  studentId: string;
+  tripId: string;
+  busId: string;
+  stopId: string;
+  expiresAt: number;
+  samplesCount: number;
+  cumulativeScore: number;
+  timeoutId: NodeJS.Timeout;
+}
 
 export interface StudentLocationSample {
   studentId: string;
@@ -58,6 +100,7 @@ export interface BoardingDetectionResult {
   candidateScores: CandidateBusScore[];
   verificationDetails: string;
   timestamp: string;
+  tripId?: string | null;
 }
 
 interface ActiveMonitoringWindow {
@@ -79,11 +122,17 @@ class BoardingDetectionService {
   // In-memory cache of latest student samples
   private latestStudentPings = new Map<string, StudentLocationSample>();
 
+  // Departure tracking
+  private departureTrackers = new Map<string, StopDepartureTracker>();
+
+  // Active verifications
+  private activeVerifications = new Map<string, ActiveVerification>();
+
   // Proximity threshold to trigger temporary monitoring window: 450 meters
-  private readonly STOP_APPROACH_THRESHOLD_METERS = 450;
+  private readonly STOP_APPROACH_THRESHOLD_METERS = BOARDING_CONFIG.STOP_APPROACH_THRESHOLD_M;
 
   // Monitoring duration: 65 seconds
-  private readonly MONITORING_WINDOW_MS = 65000;
+  private readonly MONITORING_WINDOW_MS = BOARDING_CONFIG.MONITORING_WINDOW_MS;
 
   public setSocketServer(socketServer: SocketServer): void {
     this.io = socketServer;
@@ -94,7 +143,7 @@ class BoardingDetectionService {
    * Checks if any bus is approaching assigned stops of students on that route.
    */
   public async processBusLocationUpdate(busSample: BusTelemetrySample): Promise<void> {
-    if (!busSample.routeId) return;
+    if (!busSample.routeId || !busSample.tripId) return;
 
     try {
       // 1. Fetch route stops for this bus
@@ -103,20 +152,140 @@ class BoardingDetectionService {
         orderBy: { sequence: 'asc' },
       });
 
-      // 2. Identify stops that this bus is currently near (< 450m)
-      const nearbyStops = stops.filter((s) => {
+      const now = Date.now();
+      const nearbyStopIds: string[] = [];
+
+      // Process departure tracking
+      for (let i = 0; i < stops.length; i++) {
+        const stop = stops[i];
         const dist = haversineDistanceMeters(
           busSample.latitude,
           busSample.longitude,
-          s.latitude,
-          s.longitude
+          stop.latitude,
+          stop.longitude
         );
-        return dist <= this.STOP_APPROACH_THRESHOLD_METERS;
-      });
 
-      if (nearbyStops.length === 0) return;
+        if (dist <= this.STOP_APPROACH_THRESHOLD_METERS) {
+          nearbyStopIds.push(stop.id);
+        }
 
-      const nearbyStopIds = nearbyStops.map((s) => s.id);
+        const trackerKey = `${busSample.busId}:${stop.id}`;
+        let tracker = this.departureTrackers.get(trackerKey);
+
+        if (dist <= this.STOP_APPROACH_THRESHOLD_METERS) {
+          if (!tracker) {
+            const nextStop = stops.length > i + 1 ? stops[i + 1] : null;
+            tracker = {
+              busId: busSample.busId,
+              stopId: stop.id,
+              tripId: busSample.tripId!,
+              routeId: busSample.routeId!,
+              stopSequence: stop.sequence,
+              nextStopInSequence: nextStop ? {
+                id: nextStop.id,
+                latitude: nextStop.latitude,
+                longitude: nextStop.longitude,
+                sequence: nextStop.sequence
+              } : null,
+              wasNearStop: true,
+              recentUpdates: [],
+              departed: false,
+              promptSent: false
+            };
+            this.departureTrackers.set(trackerKey, tracker);
+          } else {
+            tracker.wasNearStop = true;
+          }
+        }
+
+        if (tracker && tracker.wasNearStop && !tracker.departed) {
+          tracker.recentUpdates.push({
+            distanceFromStopM: dist,
+            speedKmh: busSample.speed ?? 0,
+            headingDeg: busSample.heading ?? null,
+            timestamp: now
+          });
+
+          if (tracker.recentUpdates.length > 8) {
+            tracker.recentUpdates.shift();
+          }
+
+          const N = BOARDING_CONFIG.DEPARTURE_MIN_CONSECUTIVE_UPDATES;
+          if (tracker.recentUpdates.length >= N) {
+            const lastN = tracker.recentUpdates.slice(-N);
+            const allSatisfy = lastN.every((u, idx) => {
+              if (u.distanceFromStopM <= BOARDING_CONFIG.DEPARTURE_MIN_DISTANCE_M) return false;
+              if (u.speedKmh <= BOARDING_CONFIG.DEPARTURE_MIN_SPEED_KMH) return false;
+              if (idx > 0 && u.distanceFromStopM <= lastN[idx - 1].distanceFromStopM) return false;
+              if (idx > 0 && (u.timestamp - lastN[idx - 1].timestamp) > BOARDING_CONFIG.DEPARTURE_MAX_UPDATE_GAP_MS) return false;
+              
+              if (tracker!.nextStopInSequence && u.headingDeg !== null) {
+                const bearing = calculateBearing(busSample.latitude, busSample.longitude, tracker!.nextStopInSequence.latitude, tracker!.nextStopInSequence.longitude);
+                const diff = headingDifference(u.headingDeg, bearing);
+                if (diff > BOARDING_CONFIG.DEPARTURE_HEADING_TOLERANCE_DEG) return false;
+              }
+              return true;
+            });
+
+            if (allSatisfy) {
+              tracker.departed = true;
+            }
+          }
+
+          if (tracker.departed && !tracker.promptSent) {
+            tracker.promptSent = true;
+            const students = await prisma.student.findMany({
+              where: {
+                assignedRouteId: tracker.routeId,
+                assignedStopId: tracker.stopId,
+                accountStatus: 'ACTIVE'
+              },
+              include: {
+                user: true,
+                assignedStop: { select: { id: true, name: true } },
+                assignedRoute: { select: { id: true, name: true } },
+              }
+            });
+
+            for (const st of students) {
+              await this.persistResult({
+                studentId: st.id,
+                studentName: st.user.name,
+                assignedRouteId: tracker.routeId,
+                assignedRouteName: 'Assigned',
+                assignedStopId: tracker.stopId,
+                assignedStopName: 'Assigned',
+                detectedBusId: tracker.busId,
+                detectedBusNumber: busSample.busNumber,
+                status: 'PENDING_CONFIRMATION',
+                confidence: 100,
+                candidateScores: [],
+                verificationDetails: 'Bus departed stop, waiting for student confirmation',
+                timestamp: new Date().toISOString(),
+                tripId: busSample.tripId
+              });
+
+              if (this.io) {
+                const eventKey = generateEventKey(st.id, busSample.tripId!, tracker.busId, tracker.stopId);
+                if (eventKey) {
+                  this.io.to(`user:${st.userId}`).emit('boarding:confirm_prompt', {
+                    eventId: eventKey,
+                    eventKey,
+                    tripId: busSample.tripId,
+                    busId: tracker.busId,
+                    busNumber: busSample.busNumber,
+                    stopId: tracker.stopId,
+                    stopName: st.assignedStop?.name || tracker.stopId,
+                    routeName: st.assignedRoute?.name || tracker.routeId,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (nearbyStopIds.length === 0) return;
 
       // 3. Find students assigned to these stops on this route
       const studentsAtStops = await prisma.student.findMany({
@@ -133,19 +302,16 @@ class BoardingDetectionService {
       });
 
       // 4. Open/refresh temporary monitoring windows for these students
-      const now = Date.now();
       for (const student of studentsAtStops) {
         if (!student.assignedStopId) continue;
 
         const existing = this.activeWindows.get(student.id);
         if (existing) {
-          // Extend candidate buses list
           if (!existing.candidateBusIds.includes(busSample.busId)) {
             existing.candidateBusIds.push(busSample.busId);
           }
           existing.expiresAt = Math.max(existing.expiresAt, now + this.MONITORING_WINDOW_MS);
         } else {
-          // Open new temporary monitoring window
           this.activeWindows.set(student.id, {
             studentId: student.id,
             routeId: busSample.routeId,
@@ -156,7 +322,6 @@ class BoardingDetectionService {
             studentSamples: [],
           });
 
-          // Notify student app to start temporary sampling
           if (this.io) {
             this.io.to(`user:${student.userId}`).emit('boarding:window_open', {
               studentId: student.id,
@@ -167,7 +332,6 @@ class BoardingDetectionService {
           }
         }
 
-        // If we have a recent student ping, evaluate correlation immediately
         const recentPing = this.latestStudentPings.get(student.id);
         if (recentPing && now - new Date(recentPing.timestamp).getTime() < 30000) {
           await this.evaluateStudentBoarding(student.id);
@@ -196,6 +360,29 @@ class BoardingDetectionService {
     } else {
       // Check if student is near any active bus across all routes (e.g. wrong bus case)
       await this.checkAdHocBoarding(sample);
+    }
+
+    // Evaluate GPS correlation for active verifications
+    for (const verification of this.activeVerifications.values()) {
+      if (verification.studentId === sample.studentId) {
+        const trip = await prisma.trip.findUnique({
+          where: { id: verification.tripId },
+          include: { locations: { orderBy: { timestamp: 'desc' }, take: 1 } }
+        });
+        if (trip && trip.locations.length > 0) {
+          const busLoc = trip.locations[0];
+          const dist = haversineDistanceMeters(sample.latitude, sample.longitude, busLoc.latitude, busLoc.longitude);
+          
+          let score = 0;
+          if (dist <= 25) score = 100;
+          else if (dist <= 50) score = 80;
+          else if (dist <= 100) score = 50;
+          else if (dist <= 200) score = 20;
+
+          verification.samplesCount += 1;
+          verification.cumulativeScore += score;
+        }
+      }
     }
   }
 
@@ -466,12 +653,28 @@ class BoardingDetectionService {
   /**
    * Saves boarding detection state into the database and broadcasts to socket rooms.
    */
-  private async persistResult(result: BoardingDetectionResult): Promise<BoardingDetectionResult> {
+  private async persistResult(result: BoardingDetectionResult): Promise<BoardingDetectionResult | null> {
+    const eventKey = generateEventKey(result.studentId, result.tripId || null, result.detectedBusId, result.assignedStopId);
+    
+    if (!eventKey) {
+      console.warn('[BoardingDetectionService] Missing IDs for eventKey generation');
+      return null;
+    }
+
     try {
+      const existing = await prisma.boardingEvent.findUnique({
+         where: { eventKey }
+      });
+
+      if (existing && TERMINAL_STATUSES.includes(existing.status as any)) {
+         return result; // do not overwrite
+      }
+
       if (result.assignedRouteId) {
-        // Upsert latest boarding event for this student on this route
-        await prisma.boardingEvent.create({
-          data: {
+        await prisma.boardingEvent.upsert({
+          where: { eventKey },
+          create: {
+            eventKey,
             studentId: result.studentId,
             routeId: result.assignedRouteId,
             stopId: result.assignedStopId,
@@ -481,7 +684,15 @@ class BoardingDetectionService {
             detectedBusNumber: result.detectedBusNumber,
             notes: result.verificationDetails,
             verifiedAt: result.status.includes('BOARDED') ? new Date() : null,
+            tripId: result.tripId || null
           },
+          update: {
+            status: result.status,
+            confidence: result.confidence,
+            detectedBusNumber: result.detectedBusNumber,
+            notes: result.verificationDetails,
+            verifiedAt: result.status.includes('BOARDED') ? new Date() : null,
+          }
         });
       }
 
@@ -503,6 +714,129 @@ class BoardingDetectionService {
     }
 
     return result;
+  }
+
+  public async handleStudentConfirmation(
+    studentId: string,
+    tripId: string,
+    busId: string,
+    stopId: string,
+    response: 'YES' | 'NO'
+  ): Promise<any> {
+    const eventKey = generateEventKey(studentId, tripId, busId, stopId);
+    if (!eventKey) return null;
+
+    const existing = await prisma.boardingEvent.findUnique({ where: { eventKey } });
+    if (!existing) return null;
+
+    if (response === 'YES') {
+      const updated = await prisma.boardingEvent.update({
+        where: { eventKey },
+        data: {
+          status: 'BOARDED_CONFIRMED',
+          studentResponse: 'YES',
+          respondedAt: new Date(),
+          confirmationSource: 'STUDENT_YES',
+          verifiedAt: new Date(),
+        },
+        include: { student: { include: { user: true } } }
+      });
+      if (this.io) {
+        this.io.to(`user:${updated.student.userId}`).emit('boarding:status_update', updated);
+        this.io.to('admin').emit('boarding:admin_update', updated);
+      }
+      return updated;
+    } else {
+      const expiresAt = new Date(Date.now() + BOARDING_CONFIG.VERIFICATION_WINDOW_MS);
+      const updated = await prisma.boardingEvent.update({
+        where: { eventKey },
+        data: {
+          status: 'STUDENT_DECLINED',
+          studentResponse: 'NO',
+          respondedAt: new Date(),
+          verificationExpiresAt: expiresAt,
+        }
+      });
+
+      const timeoutId = setTimeout(() => {
+        this.finalizeVerification(eventKey);
+      }, BOARDING_CONFIG.VERIFICATION_WINDOW_MS);
+
+      this.activeVerifications.set(eventKey, {
+        eventId: eventKey,
+        studentId,
+        tripId,
+        busId,
+        stopId,
+        expiresAt: expiresAt.getTime(),
+        samplesCount: 0,
+        cumulativeScore: 0,
+        timeoutId
+      });
+      return updated;
+    }
+  }
+
+  private async finalizeVerification(eventId: string) {
+    const verification = this.activeVerifications.get(eventId);
+    if (!verification) return;
+    this.activeVerifications.delete(eventId);
+
+    let finalStatus: BoardingStatus = 'NOT_BOARDED_CONFIRMED';
+    let gpsInference = 'INSUFFICIENT_DATA';
+
+    let confirmationSource = 'VERIFICATION_INCOMPLETE';
+
+    if (verification.samplesCount < BOARDING_CONFIG.VERIFICATION_MIN_SAMPLES) {
+      finalStatus = 'VERIFICATION_INCOMPLETE';
+      gpsInference = 'INSUFFICIENT_DATA';
+      confirmationSource = 'VERIFICATION_INCOMPLETE';
+    } else {
+      const avgScore = verification.cumulativeScore / verification.samplesCount;
+      if (avgScore < BOARDING_CONFIG.AGREE_THRESHOLD) {
+        finalStatus = 'NOT_BOARDED_CONFIRMED';
+        gpsInference = 'NOT_BOARDED';
+        confirmationSource = 'STUDENT_NO_GPS_AGREE';
+      } else if (avgScore >= BOARDING_CONFIG.CONFLICT_THRESHOLD) {
+        finalStatus = 'CONFLICT';
+        gpsInference = 'LIKELY_BOARDED';
+        confirmationSource = 'GPS_AUTO';
+      } else {
+        finalStatus = 'NOT_BOARDED_CONFIRMED';
+        gpsInference = 'INSUFFICIENT_DATA';
+        confirmationSource = 'STUDENT_NO_GPS_INCONCLUSIVE';
+      }
+    }
+
+    const avgConfidence = verification.samplesCount > 0
+      ? Math.round(verification.cumulativeScore / verification.samplesCount)
+      : 0;
+
+    const updated = await prisma.boardingEvent.update({
+      where: { eventKey: eventId },
+      data: {
+        status: finalStatus,
+        gpsInference,
+        gpsConfidence: avgConfidence,
+        gpsEvidenceSummary: `${verification.samplesCount} GPS samples collected. Average correlation score: ${avgConfidence}%. ` +
+          (verification.samplesCount < BOARDING_CONFIG.VERIFICATION_MIN_SAMPLES
+            ? 'Insufficient data for GPS inference.'
+            : `Score vs thresholds: agree<${BOARDING_CONFIG.AGREE_THRESHOLD}, conflict>=${BOARDING_CONFIG.CONFLICT_THRESHOLD}.`),
+        confirmationSource,
+        verifiedAt: new Date(),
+      },
+      include: {
+        student: { include: { user: true } }
+      }
+    });
+
+    if (this.io) {
+      this.io.to(`user:${updated.student.userId}`).emit('boarding:verification_complete', updated);
+      this.io.to('admin').emit('boarding:admin_update', updated);
+      if (finalStatus === 'CONFLICT') {
+        this.io.to('admin').emit('boarding:conflict_created', updated);
+      }
+    }
   }
 
   /**

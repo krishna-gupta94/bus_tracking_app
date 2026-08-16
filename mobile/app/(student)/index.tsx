@@ -24,6 +24,8 @@ import {
   calculateDistanceKm,
   formatDistance,
 } from '../../src/services/busService';
+import { BoardingConfirmationModal } from '../../src/components/BoardingConfirmationModal';
+import { startStudentBoardingVerification, stopStudentBoardingVerification } from '../../src/services/studentBoardingTask';
 
 import { io, Socket } from 'socket.io-client';
 
@@ -37,6 +39,19 @@ export default function StudentHomeScreen() {
   const [boardingStatus, setBoardingStatus] = useState<BoardingStatusData | null>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  
+  const [boardingPrompt, setBoardingPrompt] = useState<{
+    visible: boolean;
+    eventId: string;
+    eventKey: string;
+    tripId: string;
+    busId: string;
+    busNumber: string;
+    stopId: string;
+    stopName: string;
+    routeName: string;
+  } | null>(null);
+  const shownPromptKeys = useRef<Set<string>>(new Set());
 
   // Check if student GPS location is available (non-intrusive)
   const { userLocation } = useLocationPermission(true);
@@ -176,6 +191,20 @@ export default function StudentHomeScreen() {
       loadData();
     });
 
+    socket.on('boarding:confirm_prompt', (data: any) => {
+      // Dedup: don't show same prompt twice
+      if (shownPromptKeys.current.has(data.eventKey)) return;
+      shownPromptKeys.current.add(data.eventKey);
+      setBoardingPrompt({
+        visible: true,
+        ...data,
+      });
+    });
+
+    socket.on('boarding:verification_complete', () => {
+      stopStudentBoardingVerification().catch(() => {});
+    });
+
     // Poll every 10s for fallback
     const interval = setInterval(loadData, 10000);
     return () => {
@@ -208,6 +237,28 @@ export default function StudentHomeScreen() {
     if (hour < 12) return 'Good Morning 👋';
     if (hour < 17) return 'Good Afternoon 👋';
     return 'Good Evening 🌙';
+  };
+
+  const handleBoardingResponse = async (response: 'YES' | 'NO') => {
+    if (!boardingPrompt) return;
+    try {
+      await mobileApi.post('/boarding/confirm', {
+        tripId: boardingPrompt.tripId,
+        busId: boardingPrompt.busId,
+        stopId: boardingPrompt.stopId,
+        response,
+      });
+      if (response === 'NO') {
+        // Start background verification
+        startStudentBoardingVerification(
+          boardingPrompt.eventId,
+          180000 // 3 min default
+        ).catch(() => {});
+      }
+    } catch (e) {
+      console.error('[Boarding] Confirmation failed:', e);
+    }
+    setBoardingPrompt(null);
   };
 
   const activeBuses = routeDiscovery?.sortedBuses || [];
@@ -263,6 +314,135 @@ export default function StudentHomeScreen() {
             </Text>
             <Text style={styles.boardingSub}>
               Correlating trajectory post-departure ({conf}%)
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'PENDING_CONFIRMATION') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: '#f59e0b' }]}>
+          <ActivityIndicator size="small" color="#f59e0b" style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#f59e0b' }]}>
+              BOARDING CHECK IN PROGRESS
+            </Text>
+            <Text style={styles.boardingSub}>
+              Please confirm your boarding status
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'BOARDED_CONFIRMED' || status === 'STUDENT_CONFIRMED') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10b981' }]}>
+          <View style={[styles.boardingDot, { backgroundColor: '#10b981' }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#10b981' }]}>
+              CONFIRMED ONBOARD {busNum ? `BUS ${busNum}` : 'BUS'}
+            </Text>
+            <Text style={styles.boardingSub}>
+              Have a safe trip!
+            </Text>
+          </View>
+          <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+        </View>
+      );
+    }
+
+    if (status === 'STUDENT_DECLINED') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+          <Ionicons name="time-outline" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: colors.textSecondary }]}>
+              DECLINED — VERIFYING...
+            </Text>
+            <Text style={styles.boardingSub}>
+              Confirming you are not on the bus
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'CONFLICT') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(249, 115, 22, 0.1)', borderColor: '#f97316' }]}>
+          <Ionicons name="warning-outline" size={20} color="#f97316" style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#f97316' }]}>
+              BOARDING STATUS UNDER REVIEW
+            </Text>
+            <Text style={styles.boardingSub}>
+              GPS indicates movement on the bus
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'NOT_BOARDED_CONFIRMED') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+          <Ionicons name="close-circle-outline" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: colors.textSecondary }]}>
+              NOT ON BUS
+            </Text>
+            <Text style={styles.boardingSub}>
+              You did not board this bus
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'GPS_LIKELY_BOARDED') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(253, 224, 71, 0.1)', borderColor: '#fde047' }]}>
+          <Ionicons name="location-outline" size={20} color="#fde047" style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#fde047' }]}>
+              LIKELY ONBOARD {busNum ? `BUS ${busNum}` : 'BUS'}
+            </Text>
+            <Text style={styles.boardingSub}>
+              GPS correlation detected
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'NO_RESPONSE') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+          <Ionicons name="help-circle-outline" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: colors.textSecondary }]}>
+              NO RESPONSE RECORDED
+            </Text>
+            <Text style={styles.boardingSub}>
+              Did not respond to prompt
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (status === 'VERIFICATION_INCOMPLETE') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+          <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: colors.textSecondary }]}>
+              VERIFICATION INCOMPLETE
+            </Text>
+            <Text style={styles.boardingSub}>
+              Unable to complete verification
             </Text>
           </View>
         </View>
@@ -522,6 +702,18 @@ export default function StudentHomeScreen() {
         longitude={userLocation?.longitude ?? null}
         stopName={stop?.name || null}
       />
+
+      {boardingPrompt && (
+        <BoardingConfirmationModal
+          visible={boardingPrompt.visible}
+          onClose={() => setBoardingPrompt(null)}
+          onRespond={handleBoardingResponse}
+          busNumber={boardingPrompt.busNumber}
+          stopName={boardingPrompt.stopName}
+          routeName={boardingPrompt.routeName}
+          eventId={boardingPrompt.eventId}
+        />
+      )}
     </SafeAreaView>
   );
 }

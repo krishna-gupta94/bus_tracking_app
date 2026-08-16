@@ -80,6 +80,29 @@ export default function RouteMonitoringPage() {
   const [simReport, setSimReport] = useState<SimulationReport | null>(null);
   const [showSimModal, setShowSimModal] = useState<boolean>(false);
 
+  // Conflict detection state
+  interface ConflictEvent {
+    id: string;
+    studentId: string;
+    busId: string | null;
+    tripId: string | null;
+    routeId: string;
+    stopId: string | null;
+    status: string;
+    gpsConfidence: number;
+    gpsEvidenceSummary: string | null;
+    gpsInference: string | null;
+    studentResponse: string | null;
+    respondedAt: string | null;
+    createdAt: string;
+    student: { user: { name: string; email: string } };
+    bus: { busNumber: string } | null;
+    route: { name: string } | null;
+  }
+
+  const [conflicts, setConflicts] = useState<ConflictEvent[]>([]);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
   // 1. Load initial routes list
   useEffect(() => {
     async function loadRoutes() {
@@ -113,11 +136,22 @@ export default function RouteMonitoringPage() {
     }
   }, []);
 
+  const loadConflicts = useCallback(async (routeId?: string) => {
+    try {
+      const query = routeId ? `?routeId=${routeId}` : '';
+      const res = await api.get(`/boarding/conflicts${query}`);
+      setConflicts(res.data.data || []);
+    } catch (err: any) {
+      console.error('Failed to load conflicts:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedRouteId) {
       loadRouteData(selectedRouteId);
+      loadConflicts(selectedRouteId);
     }
-  }, [selectedRouteId, loadRouteData]);
+  }, [selectedRouteId, loadRouteData, loadConflicts]);
 
   // 3. Socket.IO live updates listener
   useEffect(() => {
@@ -158,6 +192,17 @@ export default function RouteMonitoringPage() {
       if (selectedRouteId) loadRouteData(selectedRouteId);
     });
 
+    socket.on('boarding:conflict_created', (event: any) => {
+      if (!selectedRouteId || event.routeId === selectedRouteId) {
+        loadConflicts(selectedRouteId);
+      }
+      toast('⚠️ New boarding conflict: ' + (event.studentName || 'Student'), { icon: '🚨' });
+    });
+
+    socket.on('boarding:conflict_resolved', (event: any) => {
+      setConflicts(prev => prev.filter(c => c.id !== event.eventId));
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -175,6 +220,7 @@ export default function RouteMonitoringPage() {
 
       const matchStatus =
         statusFilter === 'ALL' ||
+        (statusFilter === 'CONFLICT' && s.status === 'CONFLICT') ||
         (statusFilter === 'BOARDED' && (s.status === 'BOARDED_ASSIGNED_ROUTE_BUS' || s.status === 'LIKELY_BOARDED')) ||
         (statusFilter === 'WRONG_ROUTE' && s.status === 'BOARDED_OTHER_ROUTE_BUS') ||
         (statusFilter === 'NOT_BOARDED' && s.status === 'NOT_BOARDED') ||
@@ -187,11 +233,12 @@ export default function RouteMonitoringPage() {
   // Summary counts
   const summary = useMemo(() => {
     const total = students.length;
-    const onboard = students.filter((s) => s.status === 'BOARDED_ASSIGNED_ROUTE_BUS' || s.status === 'LIKELY_BOARDED').length;
+    const onboard = students.filter((s) => s.status === 'BOARDED_ASSIGNED_ROUTE_BUS' || s.status === 'LIKELY_BOARDED' || s.status === 'BOARDED_CONFIRMED' || s.status === 'GPS_LIKELY_BOARDED').length;
     const wrongRoute = students.filter((s) => s.status === 'BOARDED_OTHER_ROUTE_BUS').length;
     const notBoarded = students.filter((s) => s.status === 'NOT_BOARDED').length;
     const standby = students.filter((s) => s.status === 'UNKNOWN').length;
-    return { total, onboard, wrongRoute, notBoarded, standby };
+    const conflicts_count = students.filter((s) => s.status === 'CONFLICT').length;
+    return { total, onboard, wrongRoute, notBoarded, standby, conflicts_count };
   }, [students]);
 
   // 5. Trigger simulation
@@ -206,6 +253,20 @@ export default function RouteMonitoringPage() {
       toast.error('Simulation failed: ' + (err.response?.data?.message || err.message));
     } finally {
       setSimulating(false);
+    }
+  };
+
+  const handleResolveConflict = async (eventId: string, resolution: 'BOARDED' | 'NOT_BOARDED') => {
+    setResolvingId(eventId);
+    try {
+      await api.patch(`/boarding/conflicts/${eventId}/resolve`, { resolution });
+      setConflicts(prev => prev.filter(c => c.id !== eventId));
+      toast.success(`Conflict resolved as ${resolution === 'BOARDED' ? 'BOARDED' : 'NOT BOARDED'}`);
+      if (selectedRouteId) loadRouteData(selectedRouteId);
+    } catch (err: any) {
+      toast.error('Failed to resolve conflict: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setResolvingId(null);
     }
   };
 
@@ -235,6 +296,62 @@ export default function RouteMonitoringPage() {
       return (
         <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '3px 8px', borderRadius: 4 }}>
           ⚪ Not Boarded
+        </span>
+      );
+    }
+    if (status === 'BOARDED_CONFIRMED') {
+      return (
+        <span className="badge badge-green" style={{ fontSize: 11, padding: '4px 9px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          ✅ Confirmed Onboard {busNumber || ''}
+        </span>
+      );
+    }
+    if (status === 'NOT_BOARDED_CONFIRMED') {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '3px 8px', borderRadius: 4 }}>
+          ⚪ Confirmed Not Boarded
+        </span>
+      );
+    }
+    if (status === 'CONFLICT') {
+      return (
+        <span className="badge badge-red" style={{ fontSize: 11, padding: '4px 9px', display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef3cd', color: '#856404', border: '1px solid #ffc107' }}>
+          ⚠️ Conflict ({confidence}%)
+        </span>
+      );
+    }
+    if (status === 'PENDING_CONFIRMATION') {
+      return (
+        <span style={{ fontSize: 11, color: '#856404', background: '#fff3cd', padding: '3px 8px', borderRadius: 4, border: '1px solid #ffeaa7' }}>
+          🟡 Awaiting Confirmation
+        </span>
+      );
+    }
+    if (status === 'STUDENT_DECLINED') {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '3px 8px', borderRadius: 4 }}>
+          ⏳ Declined — Verifying...
+        </span>
+      );
+    }
+    if (status === 'GPS_LIKELY_BOARDED') {
+      return (
+        <span className="badge badge-yellow" style={{ fontSize: 11, padding: '4px 9px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          🟡 GPS Likely Boarded {busNumber || ''}
+        </span>
+      );
+    }
+    if (status === 'NO_RESPONSE') {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '3px 8px', borderRadius: 4 }}>
+          ⚪ No Response
+        </span>
+      );
+    }
+    if (status === 'VERIFICATION_INCOMPLETE') {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '3px 8px', borderRadius: 4 }}>
+          ⚪ Verification Incomplete
         </span>
       );
     }
@@ -379,6 +496,61 @@ export default function RouteMonitoringPage() {
         )}
       </div>
 
+      {/* Boarding Conflicts Section */}
+      {conflicts.length > 0 && (
+        <div style={{ marginBottom: 24, padding: 16, background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#e65100', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={16} /> BOARDING CONFLICTS ({conflicts.length} pending review)
+            </h3>
+            <button onClick={() => loadConflicts(selectedRouteId)} style={{ fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', color: '#e65100', fontWeight: 600 }}>
+              <RefreshCw size={12} /> Refresh
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {conflicts.map(conflict => (
+              <div key={conflict.id} style={{ background: '#ffffff', border: '1px solid #ffe0b2', borderRadius: 10, padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                      {conflict.student?.user?.name || 'Student'}
+                      {conflict.bus && <span style={{ fontWeight: 500, color: '#666', marginLeft: 8 }}>• {conflict.bus.busNumber}</span>}
+                      {conflict.route && <span style={{ fontWeight: 500, color: '#666', marginLeft: 8 }}>• {conflict.route.name}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>
+                      {new Date(conflict.createdAt).toLocaleTimeString()}
+                    </div>
+                    <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div><strong>Student says:</strong> ❌ Did NOT Board</div>
+                      <div><strong>GPS evidence:</strong> 🟢 Likely Boarded ({conflict.gpsConfidence}%)</div>
+                      {conflict.gpsEvidenceSummary && (
+                        <div style={{ fontSize: 11, color: '#888', fontStyle: 'italic' }}>{conflict.gpsEvidenceSummary}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignSelf: 'center' }}>
+                    <button
+                      onClick={() => handleResolveConflict(conflict.id, 'BOARDED')}
+                      disabled={resolvingId === conflict.id}
+                      style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, borderRadius: 8, border: 'none', background: '#4caf50', color: '#fff', cursor: 'pointer', opacity: resolvingId === conflict.id ? 0.6 : 1 }}
+                    >
+                      MARK AS BOARDED
+                    </button>
+                    <button
+                      onClick={() => handleResolveConflict(conflict.id, 'NOT_BOARDED')}
+                      disabled={resolvingId === conflict.id}
+                      style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, borderRadius: 8, border: '1px solid #ccc', background: '#f5f5f5', color: '#333', cursor: 'pointer', opacity: resolvingId === conflict.id ? 0.6 : 1 }}
+                    >
+                      MARK AS NOT BOARDED
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Route Student Roster Section */}
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="card-header" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -403,6 +575,7 @@ export default function RouteMonitoringPage() {
               <option value="BOARDED">🟢 Onboard Route Bus</option>
               <option value="WRONG_ROUTE">⚠️ Wrong Route Warning</option>
               <option value="NOT_BOARDED">⚪ Not Boarded</option>
+              <option value="CONFLICT">⚠️ Conflicts</option>
               <option value="UNKNOWN">Standby / No Telemetry</option>
             </select>
           </div>
