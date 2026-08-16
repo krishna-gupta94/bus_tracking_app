@@ -6,8 +6,8 @@ import toast from 'react-hot-toast';
 import { io, Socket } from 'socket.io-client';
 import {
   AlertTriangle, ShieldAlert, CheckCircle2,
-  Clock, MapPin, Radio, Eye, Filter, RefreshCw, X,
-  User, Bus as BusIcon, Phone, Navigation, AlertCircle
+  Clock, MapPin, Radio, Eye, RefreshCw, X,
+  Phone, AlertCircle
 } from 'lucide-react';
 
 // Dynamically load EmergencyMap with SSR disabled
@@ -110,7 +110,7 @@ export default function SOSAlertsPage() {
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [SOCKET_URL]);
 
   const updateStatus = async (alertId: string, newStatus: 'ACKNOWLEDGED' | 'RESOLVED') => {
     try {
@@ -137,23 +137,21 @@ export default function SOSAlertsPage() {
   const resolvedCount = alerts.filter((a) => a.status === 'RESOLVED').length;
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
+    <div className="page">
+      {/* Page Header */}
+      <div className="page-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 className="text-2xl font-black tracking-tight" style={{ margin: 0 }}>
-              Emergency SOS Incident Dispatch
-            </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1 className="page-title">Emergency SOS Incident Dispatch</h1>
             {activeCount > 0 && (
-              <span className="badge badge-red animate-pulse" style={{ fontSize: 12, padding: '4px 10px' }}>
+              <span className="badge badge-red pulse-indicator" style={{ fontSize: 12, padding: '4px 10px' }}>
                 <AlertTriangle size={13} style={{ marginRight: 4 }} />
                 {activeCount} ACTIVE DISTRESS SIGNAL{activeCount > 1 ? 'S' : ''}
               </span>
             )}
           </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4, margin: 0 }}>
-            Real-time localization and response system for student and driver emergency beacons across campus transit lines.
+          <p className="page-subtitle">
+            Real-time localization and response system for student and driver emergency beacons across campus transit lines
           </p>
         </div>
 
@@ -161,71 +159,76 @@ export default function SOSAlertsPage() {
           className="btn btn-secondary btn-sm"
           onClick={loadAlerts}
           disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div
-          className="card"
-          style={{
-            borderColor: activeCount > 0 ? 'var(--danger)' : undefined,
-            background: activeCount > 0 ? 'rgba(239, 68, 68, 0.05)' : undefined,
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>NEW / ACTIVE ALERTS</span>
-            <AlertCircle size={20} color={activeCount > 0 ? 'var(--danger)' : 'var(--text-muted)'} />
+      {/* KPI Stats Grid (Proper 4-Column Horizontal Layout) */}
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+        {/* Card 1: Active / New */}
+        <div className={`stat-card ${activeCount > 0 ? 'alert-highlight' : ''}`}>
+          <div>
+            <p className="stat-label">NEW / ACTIVE ALERTS</p>
+            <p className="stat-value" style={activeCount > 0 ? { color: 'var(--danger)' } : {}}>
+              {activeCount}
+            </p>
+            <p className="stat-change">Immediate dispatch required</p>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: activeCount > 0 ? 'var(--danger)' : 'var(--text-primary)', marginTop: 8 }}>
-            {activeCount}
+          <div className={`stat-icon ${activeCount > 0 ? 'red' : 'blue'}`}>
+            <AlertCircle />
           </div>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Immediate dispatch required</span>
         </div>
 
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>IN RESPONSE (ACKNOWLEDGED)</span>
-            <Clock size={20} color="var(--warning)" />
+        {/* Card 2: In Response */}
+        <div className="stat-card">
+          <div>
+            <p className="stat-label">IN RESPONSE (ACKNOWLEDGED)</p>
+            <p className="stat-value" style={acknowledgedCount > 0 ? { color: 'var(--warning)' } : {}}>
+              {acknowledgedCount}
+            </p>
+            <p className="stat-change">Officer assigned or en route</p>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--warning)', marginTop: 8 }}>
-            {acknowledgedCount}
+          <div className="stat-icon yellow">
+            <Clock />
           </div>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Officer assigned or en route</span>
         </div>
 
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>RESOLVED INCIDENTS</span>
-            <CheckCircle2 size={20} color="var(--success)" />
+        {/* Card 3: Resolved */}
+        <div className="stat-card">
+          <div>
+            <p className="stat-label">RESOLVED INCIDENTS</p>
+            <p className="stat-value" style={{ color: 'var(--success)' }}>
+              {resolvedCount}
+            </p>
+            <p className="stat-change">Cleared & safely logged</p>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--success)', marginTop: 8 }}>
-            {resolvedCount}
+          <div className="stat-icon green">
+            <CheckCircle2 />
           </div>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cleared & safely logged</span>
         </div>
 
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL INCIDENT LOG</span>
-            <ShieldAlert size={20} color="var(--primary)" />
+        {/* Card 4: Total Log */}
+        <div className="stat-card">
+          <div>
+            <p className="stat-label">TOTAL INCIDENT LOG</p>
+            <p className="stat-value">
+              {alerts.length}
+            </p>
+            <p className="stat-change">Historical telemetry records</p>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', marginTop: 8 }}>
-            {alerts.length}
+          <div className="stat-icon purple">
+            <ShieldAlert />
           </div>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Historical telemetry records</span>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {(['ALL', 'NEW', 'ACKNOWLEDGED', 'RESOLVED'] as const).map((tab) => (
           <button
             key={tab}
-            className={`btn btn-sm ${filter === tab ? 'btn-primary' : 'btn-ghost'}`}
+            className={`btn btn-sm ${filter === tab ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setFilter(tab)}
             style={{ fontWeight: 800, fontSize: 12 }}
           >
@@ -241,8 +244,8 @@ export default function SOSAlertsPage() {
       </div>
 
       {/* Incident List Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-container">
+      <div className="card">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -254,7 +257,7 @@ export default function SOSAlertsPage() {
                 <th>RECORDED LOCATION</th>
                 <th>TRIGGER TIME</th>
                 <th>STATUS</th>
-                <th>ACTIONS</th>
+                <th style={{ textAlign: 'right' }}>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -269,9 +272,9 @@ export default function SOSAlertsPage() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={9}>
-                    <div className="empty-state" style={{ padding: 40, textAlign: 'center' }}>
-                      <ShieldAlert size={48} style={{ color: 'var(--success)', opacity: 0.8, marginBottom: 12 }} />
-                      <p style={{ fontWeight: 800, fontSize: 16 }}>No Active Emergency Alerts</p>
+                    <div className="table-empty">
+                      <ShieldAlert size={48} style={{ color: 'var(--success)', opacity: 0.8, marginBottom: 12, margin: '0 auto 12px' }} />
+                      <p style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>No Active Emergency Alerts</p>
                       <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                         Campus transit system is operating safely with zero active distress signals.
                       </span>
@@ -349,7 +352,7 @@ export default function SOSAlertsPage() {
                         {hasCoords ? (
                           <div style={{ maxWidth: 220 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--danger)' }}>
-                              <MapPin size={13} />
+                              <MapPin size={13} style={{ flexShrink: 0 }} />
                               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {alert.locationAddress || `${alert.latitude?.toFixed(4)}, ${alert.longitude?.toFixed(4)}`}
                               </span>
@@ -376,7 +379,7 @@ export default function SOSAlertsPage() {
                         <span
                           className={`badge ${
                             alert.status === 'NEW'
-                              ? 'badge-red animate-pulse'
+                              ? 'badge-red pulse-indicator'
                               : alert.status === 'ACKNOWLEDGED'
                               ? 'badge-yellow'
                               : 'badge-green'
@@ -388,12 +391,12 @@ export default function SOSAlertsPage() {
                       </td>
 
                       {/* Actions */}
-                      <td>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: 6 }}>
                           <button
                             className="btn btn-secondary btn-sm"
                             onClick={() => setSelectedAlert(alert)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 800 }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 800 }}
                           >
                             <Eye size={13} /> View Map
                           </button>
@@ -466,9 +469,9 @@ export default function SOSAlertsPage() {
             </div>
 
             {/* Modal Body */}
-            <div className="modal-body space-y-4">
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Emergency Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
                 <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-muted)' }}>CALLER PROFILE</div>
                   <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', marginTop: 2 }}>
@@ -505,7 +508,7 @@ export default function SOSAlertsPage() {
                     <span
                       className={`badge ${
                         selectedAlert.status === 'NEW'
-                          ? 'badge-red animate-pulse'
+                          ? 'badge-red pulse-indicator'
                           : selectedAlert.status === 'ACKNOWLEDGED'
                           ? 'badge-yellow'
                           : 'badge-green'
@@ -572,7 +575,7 @@ export default function SOSAlertsPage() {
             </div>
 
             {/* Modal Footer Controls */}
-            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+            <div className="modal-footer" style={{ justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {selectedAlert.user?.phone && (
                   <a
