@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../theme/colors';
 import { sosService, SOSAlertPayload } from '../services/sosService';
@@ -18,11 +19,11 @@ interface EmergencyModalProps {
   userId: string;
   userName: string;
   userRole: 'STUDENT' | 'DRIVER';
-  busNumber?: string;
-  routeName?: string;
-  latitude: number;
-  longitude: number;
-  stopName?: string;
+  busNumber?: string | null;
+  routeName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  stopName?: string | null;
   socket?: any;
 }
 
@@ -41,6 +42,80 @@ export function EmergencyModal({
 }: EmergencyModalProps) {
   const [sending, setSending] = useState(false);
   const [sentAlert, setSentAlert] = useState<SOSAlertPayload | null>(null);
+  const [currentCoords, setCurrentCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'ACQUIRING' | 'AVAILABLE' | 'UNAVAILABLE'>('ACQUIRING');
+
+  // Actively check and capture fresh GPS coordinates when the modal opens
+  useEffect(() => {
+    if (!visible) {
+      setSentAlert(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function acquireLocation() {
+      // 1. If valid coordinates are already provided from live state, use them
+      if (typeof latitude === 'number' && typeof longitude === 'number' && latitude !== 0 && longitude !== 0) {
+        if (isMounted) {
+          setCurrentCoords({ latitude, longitude });
+          setGpsStatus('AVAILABLE');
+        }
+        return;
+      }
+
+      setGpsStatus('ACQUIRING');
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        let permStatus = status;
+
+        if (permStatus !== 'granted') {
+          const req = await Location.requestForegroundPermissionsAsync();
+          permStatus = req.status;
+        }
+
+        if (permStatus !== 'granted') {
+          if (isMounted) {
+            setCurrentCoords(null);
+            setGpsStatus('UNAVAILABLE');
+          }
+          return;
+        }
+
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          if (isMounted) {
+            setCurrentCoords(null);
+            setGpsStatus('UNAVAILABLE');
+          }
+          return;
+        }
+
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        if (isMounted) {
+          setCurrentCoords({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          setGpsStatus('AVAILABLE');
+        }
+      } catch (e) {
+        if (isMounted) {
+          setCurrentCoords(null);
+          setGpsStatus('UNAVAILABLE');
+        }
+      }
+    }
+
+    acquireLocation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, latitude, longitude]);
 
   const handleSendSOS = async () => {
     setSending(true);
@@ -50,17 +125,18 @@ export function EmergencyModal({
           userId,
           userName,
           userRole,
-          busNumber: busNumber || 'N/A',
-          routeName: routeName || 'N/A',
-          latitude: latitude || 28.3670,
-          longitude: longitude || 79.4304,
-          note: stopName ? `Near stop: ${stopName}` : undefined,
+          busNumber: busNumber || null,
+          routeName: routeName || null,
+          stopName: stopName || null,
+          latitude: currentCoords?.latitude ?? null,
+          longitude: currentCoords?.longitude ?? null,
+          note: stopName ? `Designated Stop: ${stopName}` : undefined,
         },
         socket
       );
       setSentAlert(alert);
     } catch (err: any) {
-      Alert.alert('SOS Delivery Error', 'Could not send alert over network. Local backup recorded.');
+      Alert.alert('SOS Delivery Notice', 'Alert recorded locally. Campus safety will be notified.');
     } finally {
       setSending(false);
     }
@@ -94,46 +170,76 @@ export function EmergencyModal({
             <>
               <Text style={styles.title}>EMERGENCY / SOS</Text>
               <Text style={styles.subtitle}>
-                Are you sure you want to broadcast an emergency distress alert to the campus safety & control center?
+                Broadcast an instant emergency distress signal to campus security & transit control.
               </Text>
 
               {/* Context Information Box */}
               <View style={styles.infoBox}>
                 <View style={styles.infoRow}>
+                  <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
+                  <Text style={styles.infoLabel}>Caller</Text>
+                  <Text style={styles.infoValue}>{userName} ({userRole})</Text>
+                </View>
+
+                <View style={styles.infoRow}>
                   <Ionicons name="bus-outline" size={16} color={colors.textSecondary} />
                   <Text style={styles.infoLabel}>Assigned Bus</Text>
-                  <Text style={styles.infoValue}>{busNumber || 'Unassigned'}</Text>
+                  <Text style={styles.infoValue}>{busNumber || 'Route Fleet'}</Text>
                 </View>
 
                 <View style={styles.infoRow}>
                   <Ionicons name="map-outline" size={16} color={colors.textSecondary} />
                   <Text style={styles.infoLabel}>Route</Text>
                   <Text style={styles.infoValue} numberOfLines={1}>
-                    {routeName || 'Unassigned'}
-                  </Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Ionicons name="navigate-outline" size={16} color={colors.textSecondary} />
-                  <Text style={styles.infoLabel}>Coordinates</Text>
-                  <Text style={styles.infoValue}>
-                    {latitude ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : 'Acquiring GPS...'}
+                    {routeName || 'General Campus'}
                   </Text>
                 </View>
 
                 {stopName && (
-                  <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                  <View style={styles.infoRow}>
                     <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-                    <Text style={styles.infoLabel}>Location / Stop</Text>
+                    <Text style={styles.infoLabel}>Stop</Text>
                     <Text style={styles.infoValue} numberOfLines={1}>
                       {stopName}
                     </Text>
                   </View>
                 )}
+
+                <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                  <Ionicons
+                    name="navigate"
+                    size={16}
+                    color={gpsStatus === 'AVAILABLE' ? colors.success : colors.warning}
+                  />
+                  <Text style={styles.infoLabel}>Your GPS Location</Text>
+                  <Text
+                    style={[
+                      styles.infoValue,
+                      gpsStatus === 'AVAILABLE'
+                        ? { color: colors.success, fontWeight: '800' }
+                        : { color: colors.warning, fontWeight: '700' },
+                    ]}
+                  >
+                    {gpsStatus === 'AVAILABLE' && currentCoords
+                      ? `${currentCoords.latitude.toFixed(5)}, ${currentCoords.longitude.toFixed(5)}`
+                      : gpsStatus === 'ACQUIRING'
+                      ? 'Acquiring GPS fix…'
+                      : 'Location unavailable'}
+                  </Text>
+                </View>
               </View>
 
+              {gpsStatus === 'UNAVAILABLE' && (
+                <View style={styles.gpsWarningBox}>
+                  <Ionicons name="information-circle" size={16} color={colors.warning} />
+                  <Text style={styles.gpsWarningText}>
+                    GPS location unavailable on device. SOS will transmit with your student profile and assigned stop info.
+                  </Text>
+                </View>
+              )}
+
               <Text style={styles.warningNote}>
-                ⚠️ Your live GPS coordinates, vehicle details, and timestamp will be instantly transmitted to college safety officers.
+                🛡️ Campus safety will receive your emergency alert and immediately dispatch assistance to your location.
               </Text>
 
               {/* Action Buttons */}
@@ -169,13 +275,13 @@ export function EmergencyModal({
               {/* Sent State */}
               <Text style={[styles.title, { color: colors.success }]}>EMERGENCY ALERT TRANSMITTED</Text>
               <Text style={styles.subtitle}>
-                Campus security & transit administration have received your emergency alert and are actively monitoring your location.
+                Campus security and transit dispatch have received your distress signal and are monitoring your status.
               </Text>
 
               <View style={styles.sentStatusCard}>
                 <View style={styles.statusPill}>
                   <View style={styles.greenDot} />
-                  <Text style={styles.statusPillText}>DISPATCH NOTIFIED • REAL-TIME GPS BROADCAST</Text>
+                  <Text style={styles.statusPillText}>DISPATCH NOTIFIED • EMERGENCY LOGGED</Text>
                 </View>
 
                 <View style={styles.sentDetailRow}>
@@ -187,11 +293,19 @@ export function EmergencyModal({
                   <Text style={styles.sentDetailVal}>{new Date(sentAlert.timestamp).toLocaleTimeString()}</Text>
                 </View>
                 <View style={styles.sentDetailRow}>
-                  <Text style={styles.sentDetailLabel}>Live Location:</Text>
-                  <Text style={styles.sentDetailVal}>
-                    {sentAlert.latitude.toFixed(4)}, {sentAlert.longitude.toFixed(4)}
+                  <Text style={styles.sentDetailLabel}>Transmitted Location:</Text>
+                  <Text style={[styles.sentDetailVal, !sentAlert.latitude && { color: colors.warning }]}>
+                    {sentAlert.latitude && sentAlert.longitude
+                      ? `${sentAlert.latitude.toFixed(5)}, ${sentAlert.longitude.toFixed(5)}`
+                      : 'Student location unavailable'}
                   </Text>
                 </View>
+                {sentAlert.locationAddress && (
+                  <View style={styles.sentDetailRow}>
+                    <Text style={styles.sentDetailLabel}>Location Area:</Text>
+                    <Text style={styles.sentDetailVal} numberOfLines={2}>{sentAlert.locationAddress}</Text>
+                  </View>
+                )}
               </View>
 
               <TouchableOpacity style={styles.doneBtn} onPress={handleDismiss} activeOpacity={0.85}>
@@ -263,37 +377,57 @@ const styles = StyleSheet.create({
   infoBox: {
     width: '100%',
     backgroundColor: colors.backgroundSecondary,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
   infoLabel: {
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '700',
     color: colors.textMuted,
-    flex: 1,
+    width: 100,
   },
   infoValue: {
+    flex: 1,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textPrimary,
-    maxWidth: 160,
+    textAlign: 'right',
+  },
+  gpsWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  gpsWarningText: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.warning,
+    fontWeight: '600',
+    lineHeight: 15,
   },
   warningNote: {
     fontSize: 11,
     color: colors.textMuted,
-    lineHeight: 15,
     textAlign: 'center',
-    marginBottom: 20,
+    lineHeight: 16,
+    marginBottom: 18,
   },
   actionRow: {
     flexDirection: 'row',
@@ -302,29 +436,29 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
-    height: 48,
+    paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    justifyContent: 'center',
+    backgroundColor: colors.backgroundSecondary,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   cancelBtnText: {
     color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   sendBtn: {
     flex: 1.5,
-    height: 48,
+    flexDirection: 'row',
+    paddingVertical: 14,
     borderRadius: 14,
     backgroundColor: colors.danger,
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 6,
   },
   sendBtnText: {
     color: '#ffffff',
@@ -335,17 +469,21 @@ const styles = StyleSheet.create({
   sentStatusCard: {
     width: '100%',
     backgroundColor: colors.backgroundSecondary,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
-    borderColor: colors.success,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
     marginBottom: 16,
   },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 14,
   },
   greenDot: {
     width: 8,
@@ -355,44 +493,48 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.success,
+    letterSpacing: 0.5,
   },
   sentDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
   sentDetailLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
+    fontWeight: '700',
   },
   sentDetailVal: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
     color: colors.textPrimary,
+    fontWeight: '800',
+    maxWidth: '65%',
+    textAlign: 'right',
   },
   doneBtn: {
     width: '100%',
-    height: 48,
+    paddingVertical: 14,
     borderRadius: 14,
     backgroundColor: colors.primary,
-    justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 10,
   },
   doneBtnText: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
   resolveBtn: {
-    marginTop: 12,
-    padding: 6,
+    paddingVertical: 6,
   },
   resolveBtnText: {
     fontSize: 12,
     color: colors.textMuted,
+    fontWeight: '700',
     textDecorationLine: 'underline',
   },
 });

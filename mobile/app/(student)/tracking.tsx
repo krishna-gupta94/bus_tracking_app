@@ -463,11 +463,11 @@ export default function StudentTrackingScreen() {
         userId={user?.id || ''}
         userName={user?.name || ''}
         userRole="STUDENT"
-        busNumber={selectedBus?.busNumber || 'Route Bus'}
-        routeName={route?.name}
-        latitude={userLocation?.latitude || 28.367}
-        longitude={userLocation?.longitude || 79.4304}
-        stopName={assignedStop?.name}
+        busNumber={selectedBus?.busNumber || null}
+        routeName={route?.name || null}
+        latitude={userLocation?.latitude ?? null}
+        longitude={userLocation?.longitude ?? null}
+        stopName={assignedStop?.name || null}
       />
     </SafeAreaView>
   );

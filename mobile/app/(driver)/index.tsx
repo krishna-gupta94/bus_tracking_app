@@ -583,10 +583,10 @@ export default function DriverHomeScreen() {
         userId={user?.id || ''}
         userName={user?.name || ''}
         userRole="DRIVER"
-        busNumber={bus?.busNumber}
-        routeName={route?.name}
-        latitude={currentCoords?.latitude || 28.367}
-        longitude={currentCoords?.longitude || 79.4304}
+        busNumber={bus?.busNumber || null}
+        routeName={route?.name || null}
+        latitude={currentCoords?.latitude ?? null}
+        longitude={currentCoords?.longitude ?? null}
         socket={socketRef.current}
       />
     </SafeAreaView>

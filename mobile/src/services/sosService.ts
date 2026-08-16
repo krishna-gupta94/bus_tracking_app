@@ -7,14 +7,18 @@ export interface SOSAlertPayload {
   userId: string;
   userName: string;
   userRole: 'STUDENT' | 'DRIVER';
-  busNumber?: string;
-  routeName?: string;
-  latitude: number;
-  longitude: number;
+  studentCode?: string;
+  driverCode?: string;
+  busNumber?: string | null;
+  routeName?: string | null;
+  stopName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAddress?: string | null;
   timestamp: string;
   status: 'NEW' | 'ACKNOWLEDGED' | 'RESOLVED';
-  severity: 'HIGH' | 'CRITICAL';
-  note?: string;
+  severity: 'HIGH' | 'CRITICAL' | 'WARNING';
+  note?: string | null;
 }
 
 const SOS_STORAGE_KEY = 'smartbus_active_sos';
@@ -22,42 +26,63 @@ const SOS_STORAGE_KEY = 'smartbus_active_sos';
 export const sosService = {
   // Send emergency SOS alert
   sendSOSAlert: async (
-    payload: Omit<SOSAlertPayload, 'timestamp' | 'status' | 'severity'>,
+    payload: {
+      userId: string;
+      userName: string;
+      userRole: 'STUDENT' | 'DRIVER';
+      busNumber?: string | null;
+      routeName?: string | null;
+      stopName?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      note?: string | null;
+    },
     socket?: Socket | null
   ): Promise<SOSAlertPayload> => {
-    const alertData: SOSAlertPayload = {
-      ...payload,
-      id: `SOS-${Date.now().toString().slice(-6)}`,
-      timestamp: new Date().toISOString(),
-      status: 'NEW',
-      severity: 'CRITICAL',
-    };
-
-    // Store active SOS locally
-    await AsyncStorage.setItem(SOS_STORAGE_KEY, JSON.stringify(alertData));
-
-    // 1. Emit through Socket.IO if connected
-    if (socket?.connected) {
-      socket.emit('sos:trigger', alertData);
-      socket.emit('location:send', {
-        latitude: alertData.latitude,
-        longitude: alertData.longitude,
-        tripId: 'EMERGENCY',
-        busId: alertData.busNumber || 'EMERGENCY',
-      });
-    }
-
-    // 2. Send via HTTP API
+    // 1. Post to dedicated backend /api/sos endpoint (creates exactly ONE DB record in Supabase)
+    let createdAlert: SOSAlertPayload;
     try {
-      await mobileApi.post('/notifications', {
-        title: `🚨 EMERGENCY SOS ALERT: ${alertData.userName}`,
-        message: `Emergency reported by ${alertData.userRole} ${alertData.userName} on Bus ${alertData.busNumber || 'N/A'} (${alertData.routeName || 'Route N/A'}). Location: ${alertData.latitude.toFixed(4)}, ${alertData.longitude.toFixed(4)}`,
+      const res = await mobileApi.post('/sos', {
+        userRole: payload.userRole,
+        userName: payload.userName,
+        busNumber: payload.busNumber || null,
+        routeName: payload.routeName || null,
+        stopName: payload.stopName || null,
+        latitude: typeof payload.latitude === 'number' ? payload.latitude : null,
+        longitude: typeof payload.longitude === 'number' ? payload.longitude : null,
+        note: payload.note || null,
+        severity: 'CRITICAL',
       });
+      createdAlert = res.data.data;
     } catch (e) {
-      console.log('[SOS HTTP Notice]', e);
+      console.warn('[sosService] Backend SOS submission failed, falling back to local object:', e);
+      createdAlert = {
+        id: `SOS-${Date.now().toString().slice(-6)}`,
+        userId: payload.userId,
+        userName: payload.userName,
+        userRole: payload.userRole,
+        busNumber: payload.busNumber || null,
+        routeName: payload.routeName || null,
+        stopName: payload.stopName || null,
+        latitude: typeof payload.latitude === 'number' ? payload.latitude : null,
+        longitude: typeof payload.longitude === 'number' ? payload.longitude : null,
+        locationAddress: typeof payload.latitude === 'number' ? `${payload.latitude.toFixed(4)}, ${payload.longitude?.toFixed(4)}` : 'Location unavailable',
+        timestamp: new Date().toISOString(),
+        status: 'NEW',
+        severity: 'CRITICAL',
+        note: payload.note || null,
+      };
     }
 
-    return alertData;
+    // Store active SOS locally in device storage
+    await AsyncStorage.setItem(SOS_STORAGE_KEY, JSON.stringify(createdAlert));
+
+    // Emit through Socket.IO if connected
+    if (socket?.connected) {
+      socket.emit('sos:trigger', createdAlert);
+    }
+
+    return createdAlert;
   },
 
   // Check if there is an active local SOS

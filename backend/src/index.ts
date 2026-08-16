@@ -7,6 +7,7 @@ import { prisma } from './prisma/client';
 import { setSocketServer as setTripSocket } from './controllers/tripController';
 import { setSocketServer as setLocationSocket } from './controllers/locationController';
 import { setSocketServer as setNotificationSocket } from './controllers/notificationController';
+import { setSOSSocketServer } from './controllers/sosController';
 import { busLocationProvider } from './services/busLocationProvider';
 import { boardingDetectionService } from './services/boardingDetectionService';
 
@@ -25,6 +26,7 @@ const io = new SocketServer(server, {
 setTripSocket(io);
 setLocationSocket(io);
 setNotificationSocket(io);
+setSOSSocketServer(io);
 busLocationProvider.setSocketServer(io);
 boardingDetectionService.setSocketServer(io);
 

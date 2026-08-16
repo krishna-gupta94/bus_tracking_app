@@ -1,31 +1,66 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { io, Socket } from 'socket.io-client';
 import {
   AlertTriangle, ShieldAlert, CheckCircle2,
-  Clock, MapPin, Radio, Eye, Filter, RefreshCw, X
+  Clock, MapPin, Radio, Eye, Filter, RefreshCw, X,
+  User, Bus as BusIcon, Phone, Navigation, AlertCircle
 } from 'lucide-react';
 
-interface SOSAlert {
+// Dynamically load EmergencyMap with SSR disabled
+const EmergencyMap = dynamic(() => import('@/components/EmergencyMap'), {
+  ssr: false,
+  loading: () => (
+    <div
+      style={{
+        height: 380,
+        borderRadius: 'var(--radius)',
+        background: 'var(--bg-secondary)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'var(--text-muted)',
+        fontSize: 13,
+      }}
+    >
+      <Radio className="animate-pulse" size={24} style={{ marginRight: 8, color: 'var(--danger)' }} />
+      Loading Emergency Incident Map…
+    </div>
+  ),
+});
+
+export interface SOSAlertItem {
   id: string;
   userId: string;
   userName: string;
-  userRole: string;
-  busNumber: string;
-  routeName: string;
-  latitude: number;
-  longitude: number;
-  timestamp: string;
-  status: 'NEW' | 'ACKNOWLEDGED' | 'RESOLVED';
-  severity: 'CRITICAL' | 'HIGH' | 'WARNING';
-  note?: string;
+  userRole: 'STUDENT' | 'DRIVER' | string;
+  studentCode?: string | null;
+  driverCode?: string | null;
+  busNumber?: string | null;
+  routeName?: string | null;
+  stopName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAddress?: string | null;
+  status: 'NEW' | 'ACKNOWLEDGED' | 'RESOLVED' | string;
+  severity: 'CRITICAL' | 'HIGH' | 'WARNING' | string;
+  note?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+  };
 }
 
 export default function SOSAlertsPage() {
-  const [alerts, setAlerts] = useState<SOSAlert[]>([]);
-  const [selectedAlert, setSelectedAlert] = useState<SOSAlert | null>(null);
+  const [alerts, setAlerts] = useState<SOSAlertItem[]>([]);
+  const [selectedAlert, setSelectedAlert] = useState<SOSAlertItem | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'NEW' | 'ACKNOWLEDGED' | 'RESOLVED'>('ALL');
   const [loading, setLoading] = useState(true);
   const socketRef = useRef<Socket | null>(null);
@@ -35,37 +70,10 @@ export default function SOSAlertsPage() {
   const loadAlerts = async () => {
     setLoading(true);
     try {
-      // Pull system notifications and parse SOS alerts
-      const res = await api.get('/notifications');
-      const parsed: SOSAlert[] = [];
-
-      res.data.data?.forEach((n: any) => {
-        const isSOS = n.title.toLowerCase().includes('sos') || n.title.toLowerCase().includes('emergency');
-        if (isSOS) {
-          // Parse coordinates and name from message if available
-          const latMatch = n.message.match(/Location:\s*([0-9.]+),\s*([0-9.]+)/i);
-          const busMatch = n.message.match(/Bus\s*([A-Z0-9]+)/i);
-
-          parsed.push({
-            id: `SOS-${n.id.slice(-6).toUpperCase()}`,
-            userId: n.userId,
-            userName: n.title.replace(/🚨\s*EMERGENCY\s*SOS\s*ALERT:\s*/i, '') || 'Campus User',
-            userRole: n.message.includes('DRIVER') ? 'DRIVER' : 'STUDENT',
-            busNumber: busMatch ? busMatch[1] : 'B001',
-            routeName: 'Main Campus Line',
-            latitude: latMatch ? parseFloat(latMatch[1]) : 28.367,
-            longitude: latMatch ? parseFloat(latMatch[2]) : 79.4304,
-            timestamp: n.createdAt,
-            status: n.read ? 'RESOLVED' : 'NEW',
-            severity: 'CRITICAL',
-            note: n.message,
-          });
-        }
-      });
-
-      setAlerts(parsed);
+      const res = await api.get('/sos');
+      setAlerts(res.data.data || []);
     } catch (e) {
-      console.log(e);
+      console.log('[SOS Load Error]', e);
     } finally {
       setLoading(false);
     }
@@ -80,8 +88,23 @@ export default function SOSAlertsPage() {
     socket.emit('join:admin');
 
     socket.on('sos:trigger', (newSOS: any) => {
-      toast.error(`🚨 New Emergency SOS from ${newSOS.userName}!`, { duration: 6000 });
-      setAlerts(prev => [newSOS, ...prev]);
+      toast.error(`🚨 EMERGENCY: ${newSOS.userRole} ${newSOS.userName} triggered an SOS!`, {
+        duration: 8000,
+        position: 'top-center',
+      });
+      // Prepend newly arrived alert
+      setAlerts((prev) => {
+        const exists = prev.some((a) => a.id === newSOS.id);
+        if (exists) return prev;
+        return [newSOS, ...prev];
+      });
+    });
+
+    socket.on('sos:status_update', ({ id, status }: { id: string; status: string }) => {
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status } : a))
+      );
+      setSelectedAlert((prev) => (prev && prev.id === id ? { ...prev, status } : prev));
     });
 
     return () => {
@@ -89,353 +112,502 @@ export default function SOSAlertsPage() {
     };
   }, []);
 
-  const updateStatus = (alertId: string, newStatus: 'ACKNOWLEDGED' | 'RESOLVED') => {
-    setAlerts(prev =>
-      prev.map(a => (a.id === alertId ? { ...a, status: newStatus } : a))
-    );
-    if (selectedAlert?.id === alertId) {
-      setSelectedAlert(prev => (prev ? { ...prev, status: newStatus } : null));
+  const updateStatus = async (alertId: string, newStatus: 'ACKNOWLEDGED' | 'RESOLVED') => {
+    try {
+      await api.patch(`/sos/${alertId}/status`, { status: newStatus });
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === alertId ? { ...a, status: newStatus } : a))
+      );
+      if (selectedAlert?.id === alertId) {
+        setSelectedAlert((prev) => (prev ? { ...prev, status: newStatus } : null));
+      }
+      toast.success(`Alert marked as ${newStatus}`);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Failed to update alert status');
     }
-    toast.success(`Alert marked as ${newStatus}`);
   };
 
-  const filtered = alerts.filter(a => (filter === 'ALL' ? true : a.status === filter));
-  const newCount = alerts.filter(a => a.status === 'NEW').length;
+  const filtered = alerts.filter((a) => {
+    if (filter === 'ALL') return true;
+    return a.status === filter;
+  });
+
+  const activeCount = alerts.filter((a) => a.status === 'NEW').length;
+  const acknowledgedCount = alerts.filter((a) => a.status === 'ACKNOWLEDGED').length;
+  const resolvedCount = alerts.filter((a) => a.status === 'RESOLVED').length;
 
   return (
-    <div className="page">
-      {/* Header */}
-      <div className="page-header">
+    <div className="space-y-6">
+      {/* Top Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ShieldAlert size={26} color="var(--danger)" />
-            Emergency SOS Control Room
-          </h1>
-          <p className="page-subtitle">Real-time incident response & student/driver distress alerts</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 className="text-2xl font-black tracking-tight" style={{ margin: 0 }}>
+              Emergency SOS Incident Dispatch
+            </h1>
+            {activeCount > 0 && (
+              <span className="badge badge-red animate-pulse" style={{ fontSize: 12, padding: '4px 10px' }}>
+                <AlertTriangle size={13} style={{ marginRight: 4 }} />
+                {activeCount} ACTIVE DISTRESS SIGNAL{activeCount > 1 ? 'S' : ''}
+              </span>
+            )}
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4, margin: 0 }}>
+            Real-time localization and response system for student and driver emergency beacons across campus transit lines.
+          </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={loadAlerts}>
-            <RefreshCw size={14} /> Refresh
-          </button>
-          <div className="badge badge-red" style={{ gap: 6, padding: '6px 12px' }}>
-            <span className="badge-dot" style={{ animation: 'pulseGlow 1.5s infinite' }} />
-            <span>{newCount} OPEN EMERGENCY ALERT{newCount !== 1 ? 'S' : ''}</span>
-          </div>
-        </div>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={loadAlerts}
+          disabled={loading}
+          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <div className="stat-card alert-highlight">
-          <div>
-            <p className="stat-label">Critical Incidents</p>
-            <p className="stat-value" style={{ color: 'var(--danger)' }}>{newCount}</p>
-            <p className="stat-change" style={{ color: 'var(--danger)' }}>Action Required</p>
+      {/* KPI Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div
+          className="card"
+          style={{
+            borderColor: activeCount > 0 ? 'var(--danger)' : undefined,
+            background: activeCount > 0 ? 'rgba(239, 68, 68, 0.05)' : undefined,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>NEW / ACTIVE ALERTS</span>
+            <AlertCircle size={20} color={activeCount > 0 ? 'var(--danger)' : 'var(--text-muted)'} />
           </div>
-          <div className="stat-icon red"><AlertTriangle /></div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: activeCount > 0 ? 'var(--danger)' : 'var(--text-primary)', marginTop: 8 }}>
+            {activeCount}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Immediate dispatch required</span>
         </div>
 
-        <div className="stat-card">
-          <div>
-            <p className="stat-label">Acknowledged</p>
-            <p className="stat-value" style={{ color: 'var(--warning)' }}>
-              {alerts.filter(a => a.status === 'ACKNOWLEDGED').length}
-            </p>
-            <p className="stat-change">Security Dispatched</p>
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>IN RESPONSE (ACKNOWLEDGED)</span>
+            <Clock size={20} color="var(--warning)" />
           </div>
-          <div className="stat-icon yellow"><Radio /></div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--warning)', marginTop: 8 }}>
+            {acknowledgedCount}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Officer assigned or en route</span>
         </div>
 
-        <div className="stat-card">
-          <div>
-            <p className="stat-label">Resolved Today</p>
-            <p className="stat-value" style={{ color: 'var(--success)' }}>
-              {alerts.filter(a => a.status === 'RESOLVED').length}
-            </p>
-            <p className="stat-change">Safe Resolution</p>
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>RESOLVED INCIDENTS</span>
+            <CheckCircle2 size={20} color="var(--success)" />
           </div>
-          <div className="stat-icon green"><CheckCircle2 /></div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--success)', marginTop: 8 }}>
+            {resolvedCount}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cleared & safely logged</span>
         </div>
 
-        <div className="stat-card">
-          <div>
-            <p className="stat-label">Total Logs</p>
-            <p className="stat-value">{alerts.length}</p>
-            <p className="stat-change">Campus Safety Archive</p>
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL INCIDENT LOG</span>
+            <ShieldAlert size={20} color="var(--primary)" />
           </div>
-          <div className="stat-icon blue"><Clock /></div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', marginTop: 8 }}>
+            {alerts.length}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Historical telemetry records</span>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="filters-row">
-        {(['ALL', 'NEW', 'ACKNOWLEDGED', 'RESOLVED'] as const).map(s => (
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+        {(['ALL', 'NEW', 'ACKNOWLEDGED', 'RESOLVED'] as const).map((tab) => (
           <button
-            key={s}
-            className={`btn ${filter === s ? 'btn-primary' : 'btn-secondary'} btn-sm`}
-            onClick={() => setFilter(s)}
+            key={tab}
+            className={`btn btn-sm ${filter === tab ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setFilter(tab)}
+            style={{ fontWeight: 800, fontSize: 12 }}
           >
-            {s === 'ALL' ? 'All Incidents' : s} ({alerts.filter(a => (s === 'ALL' ? true : a.status === s)).length})
+            {tab === 'ALL'
+              ? `All Alerts (${alerts.length})`
+              : tab === 'NEW'
+              ? `🚨 Active (${activeCount})`
+              : tab === 'ACKNOWLEDGED'
+              ? `⏳ In Response (${acknowledgedCount})`
+              : `✅ Resolved (${resolvedCount})`}
           </button>
         ))}
       </div>
 
-      {/* Incident Management Table */}
-      <div className="card">
-        <div className="table-wrap">
+      {/* Incident List Table */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="table-container">
           <table>
             <thead>
               <tr>
-                <th>Alert ID</th>
-                <th>Severity</th>
-                <th>Sender (Role)</th>
-                <th>Vehicle & Route</th>
-                <th>GPS Location</th>
-                <th>Time Logged</th>
-                <th>Status</th>
-                <th>Action</th>
+                <th>INCIDENT ID</th>
+                <th>EMERGENCY TYPE</th>
+                <th>CALLER NAME</th>
+                <th>ASSIGNED BUS & ROUTE</th>
+                <th>ASSIGNED STOP</th>
+                <th>RECORDED LOCATION</th>
+                <th>TRIGGER TIME</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 [...Array(3)].map((_, i) => (
                   <tr key={i}>
-                    {[...Array(8)].map((_, j) => (
-                      <td key={j}><div className="skeleton" style={{ height: 18 }} /></td>
+                    {[...Array(9)].map((_, j) => (
+                      <td key={j}><div className="skeleton" style={{ height: 20 }} /></td>
                     ))}
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
-                    <div className="empty-state">
-                      <ShieldAlert size={48} />
-                      <p>No Active Emergency Alerts</p>
-                      <span>Campus transit system is operating normally with zero active distress signals.</span>
+                  <td colSpan={9}>
+                    <div className="empty-state" style={{ padding: 40, textAlign: 'center' }}>
+                      <ShieldAlert size={48} style={{ color: 'var(--success)', opacity: 0.8, marginBottom: 12 }} />
+                      <p style={{ fontWeight: 800, fontSize: 16 }}>No Active Emergency Alerts</p>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                        Campus transit system is operating safely with zero active distress signals.
+                      </span>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filtered.map(alert => (
-                  <tr
-                    key={alert.id}
-                    style={{
-                      background: alert.status === 'NEW' ? 'rgba(239, 68, 68, 0.05)' : undefined,
-                    }}
-                  >
-                    <td>
-                      <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>{alert.id}</strong>
-                    </td>
-                    <td>
-                      <span className="badge badge-red">
-                        <span className="badge-dot" /> {alert.severity}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 700 }}>{alert.userName}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{alert.userRole}</div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>BUS {alert.busNumber}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{alert.routeName}</div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent)' }}>
-                        <MapPin size={12} />
-                        {alert.latitude.toFixed(4)}, {alert.longitude.toFixed(4)}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      <Clock size={11} style={{ display: 'inline', marginRight: 4 }} />
-                      {new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge ${
+                filtered.map((alert) => {
+                  const isStudent = alert.userRole === 'STUDENT';
+                  const hasCoords =
+                    typeof alert.latitude === 'number' &&
+                    typeof alert.longitude === 'number' &&
+                    alert.latitude !== 0;
+
+                  return (
+                    <tr
+                      key={alert.id}
+                      style={{
+                        background:
                           alert.status === 'NEW'
-                            ? 'badge-red'
-                            : alert.status === 'ACKNOWLEDGED'
-                            ? 'badge-yellow'
-                            : 'badge-green'
-                        }`}
-                      >
-                        <span className="badge-dot" />
-                        {alert.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => setSelectedAlert(alert)}
-                          title="View Details"
+                            ? isStudent
+                              ? 'rgba(239, 68, 68, 0.08)'
+                              : 'rgba(245, 158, 11, 0.08)'
+                            : undefined,
+                      }}
+                    >
+                      {/* ID */}
+                      <td>
+                        <strong style={{ color: 'var(--text-primary)', fontSize: 12, fontFamily: 'monospace' }}>
+                          {alert.id.slice(0, 10).toUpperCase()}
+                        </strong>
+                      </td>
+
+                      {/* Caller Role Badge */}
+                      <td>
+                        <span
+                          className={`badge ${isStudent ? 'badge-red' : 'badge-yellow'}`}
+                          style={{ fontWeight: 800, fontSize: 11, padding: '4px 8px' }}
                         >
-                          <Eye size={13} /> View
-                        </button>
+                          {isStudent ? '👤🚨 STUDENT SOS' : '🚌🚨 DRIVER SOS'}
+                        </span>
+                      </td>
 
-                        {alert.status === 'NEW' && (
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => updateStatus(alert.id, 'ACKNOWLEDGED')}
-                          >
-                            Acknowledge
-                          </button>
-                        )}
+                      {/* Caller Name */}
+                      <td>
+                        <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {alert.userName}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {isStudent
+                            ? alert.studentCode ? `Code: ${alert.studentCode}` : 'Student Account'
+                            : alert.driverCode ? `Code: ${alert.driverCode}` : 'Driver Account'}
+                        </div>
+                      </td>
 
-                        {alert.status !== 'RESOLVED' && (
-                          <button
-                            className="btn btn-success btn-sm"
-                            onClick={() => updateStatus(alert.id, 'RESOLVED')}
-                          >
-                            Resolve
-                          </button>
+                      {/* Assigned Bus & Route */}
+                      <td>
+                        <div style={{ fontWeight: 700 }}>
+                          {alert.busNumber ? `BUS ${alert.busNumber}` : 'Route Fleet'}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                          {alert.routeName || 'Campus General'}
+                        </div>
+                      </td>
+
+                      {/* Assigned Stop */}
+                      <td>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {alert.stopName || '—'}
+                        </div>
+                      </td>
+
+                      {/* Location Address */}
+                      <td>
+                        {hasCoords ? (
+                          <div style={{ maxWidth: 220 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--danger)' }}>
+                              <MapPin size={13} />
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {alert.locationAddress || `${alert.latitude?.toFixed(4)}, ${alert.longitude?.toFixed(4)}`}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {alert.latitude?.toFixed(5)}, {alert.longitude?.toFixed(5)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            Location unavailable
+                          </span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+
+                      {/* Time */}
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        <Clock size={12} style={{ display: 'inline', marginRight: 4 }} />
+                        {new Date(alert.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+
+                      {/* Status */}
+                      <td>
+                        <span
+                          className={`badge ${
+                            alert.status === 'NEW'
+                              ? 'badge-red animate-pulse'
+                              : alert.status === 'ACKNOWLEDGED'
+                              ? 'badge-yellow'
+                              : 'badge-green'
+                          }`}
+                        >
+                          <span className="badge-dot" />
+                          {alert.status}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setSelectedAlert(alert)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 800 }}
+                          >
+                            <Eye size={13} /> View Map
+                          </button>
+
+                          {alert.status === 'NEW' && (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => updateStatus(alert.id, 'ACKNOWLEDGED')}
+                            >
+                              Acknowledge
+                            </button>
+                          )}
+
+                          {alert.status !== 'RESOLVED' && (
+                            <button
+                              className="btn btn-success btn-sm"
+                              onClick={() => updateStatus(alert.id, 'RESOLVED')}
+                            >
+                              Resolve
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Incident Detail Modal */}
+      {/* Emergency Incident Command & Map Modal */}
       {selectedAlert && (
         <div className="modal-overlay" onClick={() => setSelectedAlert(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 540 }}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 840, width: '92%' }}
+          >
+            {/* Modal Header */}
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <ShieldAlert size={22} color="var(--danger)" />
-                <h3 className="modal-title">Emergency Incident Details — {selectedAlert.id}</h3>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    background: selectedAlert.userRole === 'STUDENT' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: selectedAlert.userRole === 'STUDENT' ? 'var(--danger)' : 'var(--warning)',
+                  }}
+                >
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ margin: 0, fontSize: 16 }}>
+                    {selectedAlert.userRole === 'STUDENT' ? '🚨 STUDENT EMERGENCY INCIDENT' : '🚨 DRIVER EMERGENCY INCIDENT'}
+                  </h3>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    Incident ID: {selectedAlert.id} • Registered: {new Date(selectedAlert.createdAt).toLocaleString()}
+                  </span>
+                </div>
               </div>
               <button className="btn btn-ghost btn-icon" onClick={() => setSelectedAlert(null)}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="modal-body">
-              <div
-                style={{
-                  background: 'var(--bg-secondary)',
-                  padding: 16,
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-light)',
-                  marginBottom: 16,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status:</span>
-                  <span
-                    className={`badge ${
-                      selectedAlert.status === 'NEW'
-                        ? 'badge-red'
-                        : selectedAlert.status === 'ACKNOWLEDGED'
-                        ? 'badge-yellow'
-                        : 'badge-green'
-                    }`}
-                  >
-                    {selectedAlert.status}
-                  </span>
+            {/* Modal Body */}
+            <div className="modal-body space-y-4">
+              {/* Emergency Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-muted)' }}>CALLER PROFILE</div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', marginTop: 2 }}>
+                    {selectedAlert.userName}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    {selectedAlert.userRole === 'STUDENT'
+                      ? selectedAlert.studentCode || 'Student'
+                      : selectedAlert.driverCode || 'Driver'}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sender:</span>
-                  <span style={{ fontWeight: 700 }}>{selectedAlert.userName} ({selectedAlert.userRole})</span>
+                <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-muted)' }}>ASSIGNED BUS</div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', marginTop: 2 }}>
+                    {selectedAlert.busNumber ? `BUS ${selectedAlert.busNumber}` : 'Route Fleet'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    {selectedAlert.routeName || 'General'}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Assigned Vehicle:</span>
-                  <span style={{ fontWeight: 700 }}>BUS {selectedAlert.busNumber}</span>
+                <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-muted)' }}>DESIGNATED STOP</div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', marginTop: 2 }}>
+                    {selectedAlert.stopName || 'Not Assigned'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Boarding Station</div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Coordinates:</span>
-                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                    {selectedAlert.latitude.toFixed(4)}, {selectedAlert.longitude.toFixed(4)}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Time:</span>
-                  <span>{new Date(selectedAlert.timestamp).toLocaleString()}</span>
+                <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-muted)' }}>CURRENT STATUS</div>
+                  <div style={{ marginTop: 4 }}>
+                    <span
+                      className={`badge ${
+                        selectedAlert.status === 'NEW'
+                          ? 'badge-red animate-pulse'
+                          : selectedAlert.status === 'ACKNOWLEDGED'
+                          ? 'badge-yellow'
+                          : 'badge-green'
+                      }`}
+                    >
+                      {selectedAlert.status}
+                    </span>
+                  </div>
                 </div>
               </div>
 
+              {/* LIVE EMERGENCY MAP */}
+              <div>
+                <label className="form-label" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <MapPin size={14} color="var(--danger)" />
+                  <span>
+                    {selectedAlert.userRole === 'STUDENT'
+                      ? 'Student Live GPS Emergency Location'
+                      : 'Driver Vehicle GPS Emergency Location'}
+                  </span>
+                </label>
+                <EmergencyMap
+                  alert={{
+                    alertId: selectedAlert.id,
+                    userId: selectedAlert.userId,
+                    userName: selectedAlert.userName,
+                    userRole: selectedAlert.userRole,
+                    studentCode: selectedAlert.studentCode,
+                    driverCode: selectedAlert.driverCode,
+                    busNumber: selectedAlert.busNumber,
+                    routeName: selectedAlert.routeName,
+                    stopName: selectedAlert.stopName,
+                    latitude: selectedAlert.latitude,
+                    longitude: selectedAlert.longitude,
+                    locationAddress: selectedAlert.locationAddress,
+                    status: selectedAlert.status,
+                    severity: selectedAlert.severity,
+                    timestamp: selectedAlert.createdAt,
+                    note: selectedAlert.note,
+                  }}
+                />
+              </div>
+
+              {/* Incident Notes / Dispatch Message */}
               {selectedAlert.note && (
-                <div style={{ marginBottom: 16 }}>
-                  <label className="form-label">Incident Message / Dispatch Broadcast</label>
+                <div>
+                  <label className="form-label" style={{ marginBottom: 4 }}>
+                    Incident Dispatch Notes / System Message
+                  </label>
                   <div
                     style={{
                       background: 'var(--bg-secondary)',
                       padding: 12,
-                      borderRadius: 'var(--radius-sm)',
+                      borderRadius: 8,
                       fontSize: 13,
-                      color: 'var(--text-secondary)',
                       border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
                     }}
                   >
                     {selectedAlert.note}
                   </div>
                 </div>
               )}
-
-              {/* Detected Onboard Passenger Estimate */}
-              <div style={{
-                background: 'rgba(59, 130, 246, 0.06)',
-                border: '1px solid rgba(59, 130, 246, 0.2)',
-                borderRadius: 8,
-                padding: '12px 14px',
-                marginBottom: 16,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>
-                    👥 Potentially Onboard Students
-                  </span>
-                  <span className="badge badge-blue" style={{ fontSize: 10 }}>
-                    AI Detection Estimate
-                  </span>
-                </div>
-                <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: 0 }}>
-                  Real-time trajectory telemetry correlates active passengers traveling on this vehicle without relying on static assignments.
-                </p>
-              </div>
-
-              <div
-                style={{
-                  background: 'rgba(56, 189, 248, 0.08)',
-                  padding: 12,
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid rgba(56, 189, 248, 0.2)',
-                  fontSize: 12,
-                  color: 'var(--accent)',
-                }}
-              >
-                📍 Real-time emergency location beacon is tracked on the Live Tracking map. Campus security dispatch unit has access to these live coordinates.
-              </div>
             </div>
 
-            <div className="modal-footer">
-              {selectedAlert.status === 'NEW' && (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => updateStatus(selectedAlert.id, 'ACKNOWLEDGED')}
-                >
-                  Acknowledge Incident
+            {/* Modal Footer Controls */}
+            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {selectedAlert.user?.phone && (
+                  <a
+                    href={`tel:${selectedAlert.user.phone}`}
+                    className="btn btn-secondary btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Phone size={13} /> Call: {selectedAlert.user.phone}
+                  </a>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                {selectedAlert.status === 'NEW' && (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => updateStatus(selectedAlert.id, 'ACKNOWLEDGED')}
+                  >
+                    Acknowledge Alert
+                  </button>
+                )}
+
+                {selectedAlert.status !== 'RESOLVED' && (
+                  <button
+                    className="btn btn-success"
+                    onClick={() => updateStatus(selectedAlert.id, 'RESOLVED')}
+                  >
+                    Mark as Resolved
+                  </button>
+                )}
+
+                <button className="btn btn-ghost" onClick={() => setSelectedAlert(null)}>
+                  Close
                 </button>
-              )}
-              {selectedAlert.status !== 'RESOLVED' && (
-                <button
-                  className="btn btn-success"
-                  onClick={() => updateStatus(selectedAlert.id, 'RESOLVED')}
-                >
-                  Mark as Resolved
-                </button>
-              )}
-              <button className="btn btn-secondary" onClick={() => setSelectedAlert(null)}>
-                Close
-              </button>
+              </div>
             </div>
           </div>
         </div>

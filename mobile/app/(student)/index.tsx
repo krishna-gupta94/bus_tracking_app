@@ -516,11 +516,11 @@ export default function StudentHomeScreen() {
         userId={user?.id || ''}
         userName={user?.name || ''}
         userRole="STUDENT"
-        busNumber={activeBuses[0]?.busNumber || 'Assigned Route Bus'}
-        routeName={route?.name}
-        latitude={userLocation?.latitude || 28.367}
-        longitude={userLocation?.longitude || 79.4304}
-        stopName={stop?.name}
+        busNumber={activeBuses[0]?.busNumber || null}
+        routeName={route?.name || null}
+        latitude={userLocation?.latitude ?? null}
+        longitude={userLocation?.longitude ?? null}
+        stopName={stop?.name || null}
       />
     </SafeAreaView>
   );
