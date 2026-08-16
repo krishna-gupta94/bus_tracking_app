@@ -177,7 +177,6 @@ export default function DriverHomeScreen() {
 
     setLoading(true);
     try {
-      // 1. Request foreground and background location permissions
       const perm = await requestDriverLocationPermissions();
       if (!perm.foregroundGranted) {
         Alert.alert(
@@ -293,12 +292,15 @@ export default function DriverHomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         showsVerticalScrollIndicator={false}
+        alwaysBounceVertical={false}
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.roleTag}>DRIVER CONSOLE</Text>
-            <Text style={styles.driverName}>{user?.name || 'Driver'}</Text>
+            <Text style={styles.driverName} numberOfLines={1}>
+              {user?.name || 'Driver'}
+            </Text>
           </View>
 
           <StatusBadge status={activeTrip ? 'LIVE' : 'IDLE'} />
@@ -311,7 +313,7 @@ export default function DriverHomeScreen() {
             onPress={() => setShowDiagnostics((p) => !p)}
             activeOpacity={0.8}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
               <Ionicons name="hardware-chip" size={16} color={colors.primary} />
               <Text style={styles.diagTitle}>GPS & BACKGROUND DIAGNOSTICS</Text>
             </View>
@@ -374,7 +376,7 @@ export default function DriverHomeScreen() {
               {/* Coordinates & Timestamps */}
               <View style={styles.diagDetailRow}>
                 <Text style={styles.diagDetailLabel}>Last GPS:</Text>
-                <Text style={styles.diagDetailVal}>
+                <Text style={styles.diagDetailVal} numberOfLines={1}>
                   {diagnostics.lastGpsCoords
                     ? `${diagnostics.lastGpsCoords.latitude.toFixed(5)}, ${diagnostics.lastGpsCoords.longitude.toFixed(5)}`
                     : 'Awaiting Fix'}
@@ -382,23 +384,23 @@ export default function DriverHomeScreen() {
               </View>
               <View style={styles.diagDetailRow}>
                 <Text style={styles.diagDetailLabel}>GPS Timestamp:</Text>
-                <Text style={styles.diagDetailVal}>{diagnostics.lastGpsTimestamp || 'None'}</Text>
+                <Text style={styles.diagDetailVal} numberOfLines={1}>{diagnostics.lastGpsTimestamp || 'None'}</Text>
               </View>
               <View style={styles.diagDetailRow}>
                 <Text style={styles.diagDetailLabel}>Upload Timestamp:</Text>
-                <Text style={styles.diagDetailVal}>{diagnostics.lastBackendUploadTimestamp || 'None'}</Text>
+                <Text style={styles.diagDetailVal} numberOfLines={1}>{diagnostics.lastBackendUploadTimestamp || 'None'}</Text>
               </View>
               {diagnostics.lastBackendUploadError && (
                 <View style={styles.diagDetailRow}>
                   <Text style={[styles.diagDetailLabel, { color: colors.danger }]}>Upload Error:</Text>
-                  <Text style={[styles.diagDetailVal, { color: colors.danger }]}>{diagnostics.lastBackendUploadError}</Text>
+                  <Text style={[styles.diagDetailVal, { color: colors.danger }]} numberOfLines={2}>{diagnostics.lastBackendUploadError}</Text>
                 </View>
               )}
             </View>
           )}
         </View>
 
-        {/* ACTIVE TRIP DASHBOARD (Optimized for safe driving & background tracking) */}
+        {/* ACTIVE TRIP DASHBOARD */}
         {activeTrip ? (
           <>
             {/* Live GPS Broadcast Status Box */}
@@ -415,7 +417,7 @@ export default function DriverHomeScreen() {
                   size={14}
                   color={isBgActive ? '#10b981' : '#f59e0b'}
                 />
-                <Text style={[styles.bgStatusText, { color: isBgActive ? '#10b981' : '#f59e0b' }]}>
+                <Text style={[styles.bgStatusText, { color: isBgActive ? '#10b981' : '#f59e0b' }]} numberOfLines={2}>
                   {isBgActive
                     ? 'BACKGROUND SERVICE RUNNING (Screen lock & minimize supported)'
                     : 'BACKGROUND SERVICE STARTING…'}
@@ -431,24 +433,26 @@ export default function DriverHomeScreen() {
               {/* Telemetry Metrics */}
               <View style={styles.telemetryGrid}>
                 <View style={styles.telemetryCard}>
-                  <Ionicons name="radio" size={16} color={colors.success} />
+                  <Ionicons name="radio" size={15} color={colors.success} />
                   <Text style={styles.telemetryLabel}>GPS PACKETS</Text>
-                  <Text style={styles.telemetryVal}>{diagnostics.packetsSent || updateCount}</Text>
-                </View>
-
-                <View style={styles.telemetryCard}>
-                  <Ionicons name="navigate" size={16} color={colors.primary} />
-                  <Text style={styles.telemetryLabel}>LATITUDE</Text>
-                  <Text style={styles.telemetryVal}>
-                    {currentCoords ? currentCoords.latitude.toFixed(4) : 'Broadcasting…'}
+                  <Text style={styles.telemetryVal} numberOfLines={1}>
+                    {diagnostics.packetsSent || updateCount}
                   </Text>
                 </View>
 
                 <View style={styles.telemetryCard}>
-                  <Ionicons name="compass" size={16} color={colors.primary} />
+                  <Ionicons name="navigate" size={15} color={colors.primary} />
+                  <Text style={styles.telemetryLabel}>LATITUDE</Text>
+                  <Text style={styles.telemetryVal} numberOfLines={1}>
+                    {currentCoords ? currentCoords.latitude.toFixed(4) : 'Live…'}
+                  </Text>
+                </View>
+
+                <View style={styles.telemetryCard}>
+                  <Ionicons name="compass" size={15} color={colors.primary} />
                   <Text style={styles.telemetryLabel}>LONGITUDE</Text>
-                  <Text style={styles.telemetryVal}>
-                    {currentCoords ? currentCoords.longitude.toFixed(4) : 'Broadcasting…'}
+                  <Text style={styles.telemetryVal} numberOfLines={1}>
+                    {currentCoords ? currentCoords.longitude.toFixed(4) : 'Live…'}
                   </Text>
                 </View>
               </View>
@@ -459,14 +463,14 @@ export default function DriverHomeScreen() {
                   <Ionicons name="location" size={18} color={colors.success} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.nextStopBarLabel}>APPROACHING STOP</Text>
-                    <Text style={styles.nextStopBarName}>{nextStopInfo.nextStop.name}</Text>
+                    <Text style={styles.nextStopBarName} numberOfLines={1}>{nextStopInfo.nextStop.name}</Text>
                   </View>
                   <Text style={styles.nextStopBarSeq}>Stop #{nextStopInfo.nextStop.sequence}</Text>
                 </View>
               )}
 
               <Text style={styles.safeDrivingNotice}>
-                🛡️ Hands-free background tracking active. You can switch to Google Maps or lock your phone — live coordinates will continue broadcasting to students.
+                🛡️ Hands-free background tracking active. You can switch to navigation apps or lock your phone.
               </Text>
             </View>
 
@@ -477,8 +481,10 @@ export default function DriverHomeScreen() {
                 onPress={() => setShowSOSModal(true)}
                 activeOpacity={0.85}
               >
-                <Ionicons name="alert-circle" size={20} color="#ffffff" />
-                <Text style={styles.driverSOSText}>EMERGENCY SOS</Text>
+                <Ionicons name="alert-circle" size={18} color="#ffffff" />
+                <Text style={styles.driverSOSText} numberOfLines={1}>
+                  EMERGENCY SOS
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -491,8 +497,10 @@ export default function DriverHomeScreen() {
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="stop-circle" size={20} color="#ffffff" />
-                    <Text style={styles.endTripText}>END TRIP</Text>
+                    <Ionicons name="stop-circle" size={18} color="#ffffff" />
+                    <Text style={styles.endTripText} numberOfLines={1}>
+                      END TRIP
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -512,8 +520,8 @@ export default function DriverHomeScreen() {
                   <Text style={styles.infoLabel}>Assigned Bus</Text>
                   <Text style={styles.infoVal}>{bus ? `BUS ${bus.busNumber}` : 'Not Assigned'}</Text>
                   {bus && (
-                    <Text style={styles.subDetail}>
-                      Reg: {bus.registrationNumber} • Capacity: {bus.capacity} seats
+                    <Text style={styles.subDetail} numberOfLines={1}>
+                      Reg: {bus.registrationNumber} • {bus.capacity} seats
                     </Text>
                   )}
                 </View>
@@ -525,7 +533,7 @@ export default function DriverHomeScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.infoLabel}>Assigned Route</Text>
-                  <Text style={styles.infoVal}>{route ? route.name : 'Not Assigned'}</Text>
+                  <Text style={styles.infoVal} numberOfLines={1}>{route ? route.name : 'Not Assigned'}</Text>
                   {stops.length > 0 && (
                     <Text style={styles.subDetail}>{stops.length} designated boarding stops</Text>
                   )}
@@ -542,7 +550,7 @@ export default function DriverHomeScreen() {
                     <View style={styles.stopSeqBadge}>
                       <Text style={styles.stopSeqText}>{s.sequence}</Text>
                     </View>
-                    <Text style={styles.stopListName}>{s.name}</Text>
+                    <Text style={styles.stopListName} numberOfLines={1}>{s.name}</Text>
                   </View>
                 ))}
               </View>
@@ -567,8 +575,10 @@ export default function DriverHomeScreen() {
                 <ActivityIndicator color="#ffffff" size="small" />
               ) : (
                 <>
-                  <Ionicons name="play" size={22} color="#ffffff" />
-                  <Text style={styles.startBtnText}>START TRIP & BROADCAST GPS</Text>
+                  <Ionicons name="play" size={20} color="#ffffff" />
+                  <Text style={styles.startBtnText} numberOfLines={1}>
+                    START TRIP & BROADCAST GPS
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -599,15 +609,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   container: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 36,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 4,
+    marginBottom: 14,
+    marginTop: 2,
   },
   roleTag: {
     fontSize: 11,
@@ -616,7 +627,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   driverName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: colors.textPrimary,
     marginTop: 2,
@@ -624,10 +635,11 @@ const styles = StyleSheet.create({
   diagnosticCard: {
     backgroundColor: colors.surface,
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(56, 189, 248, 0.3)',
-    marginBottom: 16,
+    marginBottom: 14,
+    width: '100%',
   },
   diagHeaderRow: {
     flexDirection: 'row',
@@ -638,10 +650,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
     color: colors.primary,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   diagBody: {
-    marginTop: 12,
+    marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -649,11 +661,12 @@ const styles = StyleSheet.create({
   diagGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: 6,
+    marginBottom: 10,
   },
   diagItem: {
-    width: '48%',
+    flex: 1,
+    minWidth: '47%',
     backgroundColor: colors.backgroundSecondary,
     padding: 8,
     borderRadius: 8,
@@ -671,6 +684,7 @@ const styles = StyleSheet.create({
   diagDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 3,
   },
   diagDetailLabel: {
@@ -682,7 +696,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: colors.textPrimary,
-    maxWidth: '65%',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 8,
   },
   green: { color: '#10b981' },
   red: { color: '#ef4444' },
@@ -690,30 +706,31 @@ const styles = StyleSheet.create({
   muted: { color: colors.textMuted },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 18,
+    marginBottom: 14,
+    width: '100%',
   },
   cardSectionTitle: {
     fontSize: 11,
     fontWeight: '800',
     color: colors.textMuted,
     letterSpacing: 0.8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   iconCircle: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     backgroundColor: colors.primaryGlow,
     justifyContent: 'center',
@@ -725,10 +742,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   infoVal: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '800',
     color: colors.textPrimary,
-    marginTop: 2,
+    marginTop: 1,
   },
   subDetail: {
     fontSize: 11,
@@ -738,36 +755,38 @@ const styles = StyleSheet.create({
   stopListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
+    gap: 10,
+    paddingVertical: 7,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
   stopSeqBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   stopSeqText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
     color: '#ffffff',
   },
   stopListName: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
     color: colors.textPrimary,
+    flex: 1,
   },
   activeConsoleCard: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1.5,
     borderColor: colors.primary,
-    marginBottom: 18,
+    marginBottom: 14,
+    width: '100%',
   },
   activeTopRow: {
     flexDirection: 'row',
@@ -776,16 +795,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   livePulseDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: '#10b981',
   },
   activeTitle: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '900',
     color: colors.primary,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   bgStatusChip: {
     flexDirection: 'row',
@@ -795,52 +814,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    marginBottom: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   bgStatusText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '800',
     flex: 1,
   },
   timerBox: {
     backgroundColor: colors.backgroundSecondary,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 14,
+    padding: 12,
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   timerLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: colors.textMuted,
     letterSpacing: 0.8,
   },
   timerValue: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '900',
     color: '#ffffff',
-    marginTop: 4,
+    marginTop: 2,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   telemetryGrid: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
+    gap: 6,
+    marginBottom: 12,
+    width: '100%',
   },
   telemetryCard: {
     flex: 1,
     backgroundColor: colors.backgroundSecondary,
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 10,
+    padding: 8,
     alignItems: 'center',
   },
   telemetryLabel: {
     fontSize: 8,
     fontWeight: '800',
     color: colors.textMuted,
-    marginTop: 4,
+    marginTop: 3,
   },
   telemetryVal: {
     fontSize: 11,
@@ -851,102 +871,107 @@ const styles = StyleSheet.create({
   nextStopBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   nextStopBarLabel: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: '800',
     color: '#10b981',
     letterSpacing: 0.5,
   },
   nextStopBarName: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#ffffff',
     marginTop: 1,
   },
   nextStopBarSeq: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
     color: '#10b981',
   },
   safeDrivingNotice: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
-    lineHeight: 16,
+    lineHeight: 15,
     textAlign: 'center',
   },
   activeActionsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    width: '100%',
   },
   driverSOSBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: colors.danger,
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
   },
   driverSOSText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   endTripBtn: {
-    flex: 1.2,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: '#dc2626',
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
   },
   endTripText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: colors.primary,
-    borderRadius: 18,
-    paddingVertical: 18,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    width: '100%',
   },
   startBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.25)',
   },
   errorText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.danger,
     fontWeight: '600',
   },
