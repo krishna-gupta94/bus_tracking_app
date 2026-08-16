@@ -41,20 +41,22 @@ export default function StudentScheduleScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Bus Summary Banner */}
+        {/* Route Summary Banner */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryTopRow}>
             <View style={styles.busInfoRow}>
               <View style={styles.busIconBadge}>
-                <Ionicons name="bus" size={22} color={colors.primary} />
+                <Ionicons name="map" size={22} color={colors.primary} />
               </View>
-              <View>
-                <Text style={styles.busNumberText}>{bus ? `BUS ${bus.busNumber}` : 'Unassigned'}</Text>
-                <Text style={styles.routeDescText}>{route?.name || 'General Route'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.busNumberText}>{route ? route.name : 'Unassigned Route'}</Text>
+                <Text style={styles.routeDescText}>
+                  {student?.assignedStop ? `Your Stop: ${student.assignedStop.name}` : 'No stop selected'}
+                </Text>
               </View>
             </View>
 
-            <StatusBadge status={bus?.status || 'SCHEDULED'} size="sm" />
+            <StatusBadge status="ACTIVE" size="sm" />
           </View>
 
           {/* Shift Selector */}

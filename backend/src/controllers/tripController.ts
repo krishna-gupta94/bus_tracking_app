@@ -81,6 +81,13 @@ export const startTrip = async (req: AuthRequest, res: Response): Promise<void> 
       routeId: driver.bus.routeId,
       driverName: req.user.name,
     });
+    io.to(`route:${driver.bus.routeId}`).emit('trip:started', {
+      tripId: trip.id,
+      busId: driver.bus.id,
+      busNumber: driver.bus.busNumber,
+      routeId: driver.bus.routeId,
+      driverName: req.user.name,
+    });
     io.to('admin').emit('trip:started', {
       tripId: trip.id,
       busId: driver.bus.id,
@@ -89,14 +96,17 @@ export const startTrip = async (req: AuthRequest, res: Response): Promise<void> 
     });
   }
 
-  // Notify assigned students
-  const students = await prisma.student.findMany({ where: { assignedBusId: driver.bus.id }, select: { userId: true } });
+  // Notify students assigned to this route
+  const students = await prisma.student.findMany({
+    where: { assignedRouteId: driver.bus.routeId, accountStatus: 'ACTIVE' },
+    select: { userId: true },
+  });
   if (students.length > 0) {
     await prisma.notification.createMany({
-      data: students.map(s => ({
+      data: students.map((s) => ({
         userId: s.userId,
-        title: `Bus ${driver.bus!.busNumber} has started`,
-        message: `Your bus (${driver.bus!.busNumber}) has started its trip on ${driver.bus!.route?.name || 'your route'}.`,
+        title: `Bus ${driver.bus!.busNumber} is now live on your route`,
+        message: `Bus ${driver.bus!.busNumber} has started its trip on ${driver.bus!.route?.name || 'your route'}.`,
       })),
     });
   }
@@ -131,16 +141,24 @@ export const endTrip = async (req: AuthRequest, res: Response): Promise<void> =>
       busId: activeTrip.busId,
       busNumber: activeTrip.bus.busNumber,
     });
+    io.to(`route:${trip.routeId}`).emit('trip:ended', {
+      tripId: trip.id,
+      busId: activeTrip.busId,
+      busNumber: activeTrip.bus.busNumber,
+    });
     io.to('admin').emit('trip:ended', { tripId: trip.id, busId: activeTrip.busId });
   }
 
-  const students = await prisma.student.findMany({ where: { assignedBusId: activeTrip.busId }, select: { userId: true } });
+  const students = await prisma.student.findMany({
+    where: { assignedRouteId: trip.routeId, accountStatus: 'ACTIVE' },
+    select: { userId: true },
+  });
   if (students.length > 0) {
     await prisma.notification.createMany({
-      data: students.map(s => ({
+      data: students.map((s) => ({
         userId: s.userId,
-        title: `Bus ${activeTrip.bus.busNumber} trip completed`,
-        message: `Your bus (${activeTrip.bus.busNumber}) has completed its trip.`,
+        title: `Bus ${activeTrip.bus.busNumber} completed trip`,
+        message: `Bus ${activeTrip.bus.busNumber} on your route has completed its trip.`,
       })),
     });
   }

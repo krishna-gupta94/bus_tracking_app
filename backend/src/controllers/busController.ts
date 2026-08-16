@@ -88,7 +88,11 @@ export const getBuses = async (req: AuthRequest, res: Response): Promise<void> =
           stops: { select: { id: true, name: true, sequence: true }, orderBy: { sequence: 'asc' } },
         },
       },
-      _count: { select: { students: true } },
+      trips: {
+        where: { status: 'ACTIVE' },
+        take: 1,
+        include: { locations: { orderBy: { timestamp: 'desc' }, take: 1 } },
+      },
     },
     orderBy: { busNumber: 'asc' },
   });
@@ -103,8 +107,8 @@ export const getBus = async (req: AuthRequest, res: Response): Promise<void> => 
     include: {
       driver: { include: { user: { select: { id: true, name: true, email: true, phone: true } } } },
       route: { include: { stops: { orderBy: { sequence: 'asc' } } } },
-      students: { include: { user: { select: { name: true, email: true } }, assignedStop: true } },
       trips: { orderBy: { startTime: 'desc' }, take: 5 },
+      boardingEvents: { orderBy: { createdAt: 'desc' }, take: 10, include: { student: { include: { user: { select: { name: true } } } } } },
     },
   });
   if (!bus) throw createError('Bus not found', 404);
@@ -222,23 +226,17 @@ export const deleteBus = async (req: AuthRequest, res: Response): Promise<void> 
   if (activeTrip) throw createError('Cannot delete bus with an active trip. Please end the trip first.', 400);
 
   await prisma.$transaction(async (tx) => {
-    // 1. Unassign students linked to this bus
-    await tx.student.updateMany({
-      where: { assignedBusId: id },
-      data: { assignedBusId: null },
-    });
-
-    // 2. Delete bus location history
+    // 1. Delete bus location history
     await tx.busLocation.deleteMany({
       where: { busId: id },
     });
 
-    // 3. Delete trip history for this bus
+    // 2. Delete trip history for this bus
     await tx.trip.deleteMany({
       where: { busId: id },
     });
 
-    // 4. Delete the bus
+    // 3. Delete the bus
     await tx.bus.delete({ where: { id } });
   });
 

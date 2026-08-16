@@ -13,6 +13,7 @@ import routeRouter from './routes/routes';
 import tripRouter from './routes/trips';
 import locationRouter from './routes/locations';
 import notificationRouter from './routes/notifications';
+import boardingRouter from './routes/boarding';
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/routes', routeRouter);
 app.use('/api/trips', tripRouter);
 app.use('/api/locations', locationRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/boarding', boardingRouter);
 
 // 404 handler
 app.use((_req, res) => {

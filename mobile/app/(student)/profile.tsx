@@ -109,16 +109,8 @@ export default function StudentProfileScreen() {
 
           <View style={styles.infoRow}>
             <Ionicons name="card-outline" size={18} color={colors.primary} />
-            <Text style={styles.infoLabel}>Student Code</Text>
+            <Text style={styles.infoLabel}>Student ID</Text>
             <Text style={styles.infoVal}>{student?.studentCode || 'STU-101'}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons name="bus-outline" size={18} color={colors.primary} />
-            <Text style={styles.infoLabel}>Assigned Bus</Text>
-            <Text style={styles.infoVal}>
-              {student?.assignedBus ? `BUS ${student.assignedBus.busNumber}` : 'Unassigned'}
-            </Text>
           </View>
 
           <View style={styles.infoRow}>

@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard, Users, Truck, Route,
-  Navigation, History, Bell, Settings, LogOut, Bus, AlertTriangle
+  Navigation, History, Bell, Settings, LogOut, Bus, AlertTriangle, Activity
 } from 'lucide-react';
 import api from '@/lib/api';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', section: 'OVERVIEW' },
   { href: '/live-tracking', icon: Navigation, label: 'Live Tracking', section: null },
+  { href: '/route-monitoring', icon: Activity, label: 'Route Monitoring', section: null },
   { href: '/sos-alerts', icon: AlertTriangle, label: 'SOS Alerts', section: 'SAFETY & EMERGENCY', alertBadge: true },
   { href: '/trips', icon: History, label: 'Trips', section: 'TRANSIT FLEET' },
   { href: '/buses', icon: Bus, label: 'Buses', section: null },

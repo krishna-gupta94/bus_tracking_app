@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,75 +7,195 @@ import {
   ScrollView,
   RefreshControl,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 import { mobileApi } from '../../src/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../src/theme/colors';
-import { StatusBadge } from '../../src/components/StatusBadge';
 import { LiveMiniMap } from '../../src/components/LiveMiniMap';
 import { EmergencyModal } from '../../src/components/EmergencyModal';
-import { BusDetailsModal } from '../../src/components/BusDetailsModal';
 import { useLocationPermission } from '../../src/hooks/useLocationPermission';
 import {
+  ETAPredictionData,
+  BoardingStatusData,
+  RouteDiscoveryResult,
   calculateDistanceKm,
-  calculateEtaMinutes,
-  formatEta,
   formatDistance,
-  getNextStop,
-  calculateBusRouteEta,
 } from '../../src/services/busService';
 
+import { io, Socket } from 'socket.io-client';
+
 export default function StudentHomeScreen() {
-  const { user, refreshUserData } = useAuth();
+  const { user, refreshUserData, serverUrl } = useAuth();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTrip, setActiveTrip] = useState<any>(null);
-  const [latestLoc, setLatestLoc] = useState<any>(null);
-  const [fullRoute, setFullRoute] = useState<any>(null);
-  const [liveEta, setLiveEta] = useState<any>(null);
-  const [showSOSModal, setShowSOSModal] = useState(false);
-  const [showBusDetails, setShowBusDetails] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Check if location permission is already available (non-intrusive)
+  const [routeDiscovery, setRouteDiscovery] = useState<RouteDiscoveryResult | null>(null);
+  const [boardingStatus, setBoardingStatus] = useState<BoardingStatusData | null>(null);
+  const [showSOSModal, setShowSOSModal] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+
+  // Check if student GPS location is available (non-intrusive)
   const { userLocation } = useLocationPermission(true);
 
   const student = user?.student;
-  const bus = student?.assignedBus;
   const route = student?.assignedRoute;
   const stop = student?.assignedStop;
 
   const loadData = useCallback(async () => {
-    await refreshUserData();
-    if (route?.id) {
-      try {
-        const rRes = await mobileApi.get(`/routes/${route.id}`);
-        setFullRoute(rRes.data.data);
-      } catch (e) {}
-    }
+    try {
+      await refreshUserData();
 
-    if (bus?.id) {
-      try {
-        const [locRes, etaRes] = await Promise.all([
-          mobileApi.get(`/locations/bus/${bus.id}`),
-          mobileApi.get(`/buses/eta/my-stop`).catch(() => ({ data: { data: null } })),
-        ]);
-        setLatestLoc(locRes.data.data?.location);
-        setActiveTrip(locRes.data.data?.activeTrip);
-        if (etaRes.data.data) {
-          setLiveEta(etaRes.data.data);
-        }
-      } catch (e) {}
+      // 1. Fetch all active buses on student's route with live ETAs
+      const [etaRes, boardingRes] = await Promise.all([
+        mobileApi.get('/buses/eta/my-stop').catch(() => ({ data: { data: null } })),
+        mobileApi.get('/boarding/my-status').catch(() => ({ data: { data: null } })),
+      ]);
+
+      if (etaRes.data.data) {
+        setRouteDiscovery(etaRes.data.data);
+      }
+      if (boardingRes.data.data) {
+        setBoardingStatus(boardingRes.data.data);
+      }
+    } catch (e) {
+      console.log('[StudentHome] loadData error:', e);
+    } finally {
+      setLoading(false);
     }
-  }, [bus?.id, route?.id, refreshUserData]);
+  }, [refreshUserData]);
 
   useEffect(() => {
     loadData();
-    // Poll every 10s for fresh location and ETA
+
+    const socketBase = serverUrl.replace('/api', '');
+    const socket = io(socketBase, { transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
+
+    if (route?.id) {
+      socket.emit('join:route', { routeId: route.id });
+    }
+    if (user?.id) {
+      socket.emit('join:user', { userId: user.id });
+    }
+
+    socket.on('location:update', (data: any) => {
+      setRouteDiscovery((prev) => {
+        if (!prev) return prev;
+        const exists = prev.activeBuses.some((b) => b.busId === data.busId);
+        let updated: ETAPredictionData[];
+        if (exists) {
+          updated = prev.activeBuses.map((b) =>
+            b.busId === data.busId
+              ? {
+                  ...b,
+                  currentLocation: {
+                    latitude: data.latitude,
+                    longitude: data.longitude,
+                    speed: data.speed,
+                    heading: data.heading,
+                    timestamp: data.timestamp || new Date().toISOString(),
+                  },
+                  currentSpeedKmh: data.speed ?? b.currentSpeedKmh,
+                  lastUpdatedSecondsAgo: 0,
+                  updatedAt: data.timestamp || new Date().toISOString(),
+                }
+              : b
+          );
+        } else {
+          const newBus: ETAPredictionData = {
+            busId: data.busId,
+            busNumber: data.busNumber || 'Bus',
+            tripId: data.tripId || null,
+            routeId: data.routeId || prev.routeId,
+            routeName: prev.routeName,
+            targetStopId: prev.targetStopId,
+            targetStopName: prev.targetStopName,
+            etaMinutes: 1,
+            etaSeconds: 60,
+            etaFormatted: 'TRACKING',
+            etaDisplayText: `Bus ${data.busNumber || ''} is live`,
+            distanceMeters: 0,
+            distanceFormatted: 'Live Tracking',
+            currentSpeedKmh: data.speed || 0,
+            confidence: 0.9,
+            confidenceLevel: 'HIGH',
+            status: 'ON_TIME',
+            lastUpdatedSecondsAgo: 0,
+            stopsRemaining: 1,
+            currentLocation: {
+              latitude: data.latitude,
+              longitude: data.longitude,
+              speed: data.speed,
+              heading: data.heading,
+              timestamp: data.timestamp || new Date().toISOString(),
+            },
+            updatedAt: data.timestamp || new Date().toISOString(),
+          };
+          updated = [newBus, ...prev.activeBuses];
+        }
+        return { ...prev, activeBuses: updated, sortedBuses: updated };
+      });
+    });
+
+    socket.on('eta:update', (etaData: any) => {
+      setRouteDiscovery((prev) => {
+        if (!prev) return prev;
+        const exists = prev.activeBuses.some((b) => b.busId === etaData.busId);
+        let updated: ETAPredictionData[];
+        if (exists) {
+          updated = prev.activeBuses.map((b) =>
+            b.busId === etaData.busId
+              ? {
+                  ...b,
+                  ...etaData,
+                  currentLocation: etaData.currentLocation || b.currentLocation,
+                }
+              : b
+          );
+        } else {
+          updated = [...prev.activeBuses, etaData];
+        }
+        updated.sort((a, b) => a.etaSeconds - b.etaSeconds);
+        return { ...prev, activeBuses: updated, sortedBuses: updated };
+      });
+    });
+
+    socket.on('boarding:status_update', (data: any) => {
+      setBoardingStatus(data);
+    });
+
+    socket.on('trip:started', () => {
+      loadData();
+    });
+
+    socket.on('trip:ended', () => {
+      loadData();
+    });
+
+    // Poll every 10s for fallback
     const interval = setInterval(loadData, 10000);
-    return () => clearInterval(interval);
-  }, [loadData]);
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
+  }, [route?.id, user?.id, loadData, serverUrl]);
+
+  // Send temporary location ping if boarding monitoring is active
+  useEffect(() => {
+    if (userLocation && boardingStatus?.status === 'UNKNOWN') {
+      mobileApi
+        .post('/boarding/student-ping', {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          accuracy: userLocation.accuracy ?? undefined,
+        })
+        .catch(() => {});
+    }
+  }, [userLocation, boardingStatus?.status]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -83,7 +203,6 @@ export default function StudentHomeScreen() {
     setRefreshing(false);
   };
 
-  // Dynamic Greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good Morning 👋';
@@ -91,37 +210,80 @@ export default function StudentHomeScreen() {
     return 'Good Evening 🌙';
   };
 
-  const stops = fullRoute?.stops || route?.stops || [];
+  const activeBuses = routeDiscovery?.sortedBuses || [];
+  const stops = routeDiscovery?.assignedRoute?.stops || route?.stops || [];
   const sortedStops = [...stops].sort((a: any, b: any) => a.sequence - b.sequence);
 
-  // Distance & ETA calculation fallback
-  let distanceKm = 0;
-  let etaMinutes = 0;
-  let nextStopInfo: any = { nextStop: null, distanceKm: 0, etaMinutes: 0 };
+  // Render boarding badge pill
+  const renderBoardingChip = () => {
+    const status = boardingStatus?.status || 'UNKNOWN';
+    const busNum = boardingStatus?.detectedBusNumber;
+    const conf = boardingStatus?.confidence || 0;
 
-  if (activeTrip && latestLoc) {
-    if (stop) {
-      const routeEta = calculateBusRouteEta(latestLoc.latitude, latestLoc.longitude, stop, sortedStops);
-      if (routeEta) {
-        distanceKm = routeEta.distanceKm;
-        etaMinutes = routeEta.etaMinutes;
-      } else {
-        distanceKm = calculateDistanceKm(latestLoc.latitude, latestLoc.longitude, stop.latitude, stop.longitude);
-        etaMinutes = calculateEtaMinutes(distanceKm);
-      }
+    if (status === 'BOARDED_ASSIGNED_ROUTE_BUS') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10b981' }]}>
+          <View style={[styles.boardingDot, { backgroundColor: '#10b981' }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#10b981' }]}>
+              DETECTED ONBOARD {busNum ? `BUS ${busNum}` : 'ROUTE BUS'}
+            </Text>
+            <Text style={styles.boardingSub}>
+              Traveling with route fleet ({conf}% movement confidence)
+            </Text>
+          </View>
+          <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+        </View>
+      );
     }
-    nextStopInfo = getNextStop(latestLoc.latitude, latestLoc.longitude, sortedStops);
-  }
 
-  const displayEtaText = liveEta?.etaFormatted || (activeTrip && latestLoc ? formatEta(etaMinutes) : 'OFFLINE');
-  const displayDistanceText = liveEta?.distanceFormatted || (activeTrip && latestLoc ? formatDistance(distanceKm) : 'Offline');
+    if (status === 'BOARDED_OTHER_ROUTE_BUS') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: '#ef4444' }]}>
+          <Ionicons name="warning" size={20} color="#ef4444" style={{ marginRight: 6 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#ef4444' }]}>
+              WRONG ROUTE WARNING: {busNum ? `BUS ${busNum}` : 'OTHER BUS'}
+            </Text>
+            <Text style={styles.boardingSub}>
+              Detected traveling on a vehicle not assigned to your route
+            </Text>
+          </View>
+        </View>
+      );
+    }
 
-  const nextStopName =
-    liveEta?.nextStopName ||
-    nextStopInfo.nextStop?.name ||
-    stop?.name ||
-    (sortedStops[0] ? sortedStops[0].name : 'Campus Gate');
-  const nextStopEta = liveEta?.etaFormatted || (activeTrip && latestLoc ? formatEta(nextStopInfo.etaMinutes || etaMinutes) : 'ETA unavailable');
+    if (status === 'LIKELY_BOARDED') {
+      return (
+        <View style={[styles.boardingCard, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: '#f59e0b' }]}>
+          <View style={[styles.boardingDot, { backgroundColor: '#f59e0b' }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.boardingTitle, { color: '#f59e0b' }]}>
+              LIKELY ONBOARD {busNum ? `BUS ${busNum}` : ''}
+            </Text>
+            <Text style={styles.boardingSub}>
+              Correlating trajectory post-departure ({conf}%)
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.boardingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Ionicons name="location-outline" size={18} color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.boardingTitle, { color: colors.textPrimary }]}>
+            WAITING AT ASSIGNED STOP
+          </Text>
+          <Text style={styles.boardingSub}>
+            Automatic boarding will verify when your bus arrives
+          </Text>
+        </View>
+        <Ionicons name="radio-outline" size={16} color={colors.textMuted} />
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -148,7 +310,7 @@ export default function StudentHomeScreen() {
           </View>
         </View>
 
-        {/* PROMINENT EMERGENCY / SOS TRIGGER BUTTON (ALWAYS VISIBLE) */}
+        {/* PROMINENT EMERGENCY / SOS TRIGGER BUTTON */}
         <TouchableOpacity
           style={[styles.emergencyBanner, shadows.emergencyGlow]}
           onPress={() => setShowSOSModal(true)}
@@ -159,144 +321,190 @@ export default function StudentHomeScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.sosTitle}>EMERGENCY / SOS DISPATCH</Text>
-            <Text style={styles.sosSubtitle}>Instant alert to campus safety & control center</Text>
+            <Text style={styles.sosSubtitle}>Instant alert to campus safety & dispatch center</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
 
-        {/* Primary Bus Status & ETA Card */}
-        <View style={styles.mainCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.busHeaderLeft}>
-              <View style={styles.busIconBadge}>
-                <Ionicons name="bus" size={22} color={colors.primary} />
-              </View>
-              <View>
-                <Text style={styles.busTitle}>
-                  {bus ? `BUS ${bus.busNumber}` : 'No Bus Assigned'}
-                </Text>
-                <Text style={styles.routeName} numberOfLines={1}>
-                  {route ? route.name : 'Contact transit admin for route assignment'}
-                </Text>
-              </View>
+        {/* ROUTE & ASSIGNED STOP IDENTITY CARD */}
+        <View style={styles.routeHeaderCard}>
+          <View style={styles.routeHeaderRow}>
+            <View style={styles.routeIconBox}>
+              <Ionicons name="map" size={22} color={colors.primary} />
             </View>
-
-            <StatusBadge status={activeTrip ? 'LIVE' : bus?.status || 'IDLE'} />
-          </View>
-
-          {/* Live Arrival Banner */}
-          {activeTrip && latestLoc ? (
-            <View style={styles.arrivalBox}>
-              <View style={styles.arrivalCol}>
-                <Text style={styles.arrivalLabel}>ARRIVING IN</Text>
-                <Text style={styles.arrivalValue}>{displayEtaText}</Text>
-              </View>
-              <View style={styles.arrivalDivider} />
-              <View style={styles.arrivalCol}>
-                <Text style={styles.arrivalLabel}>DISTANCE</Text>
-                <Text style={styles.distanceValue}>{displayDistanceText}</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.idleArrivalBox}>
-              <Ionicons name="time-outline" size={18} color={colors.textMuted} />
-              <Text style={styles.idleText}>
-                {bus ? 'Bus is currently waiting for trip start' : 'No vehicle scheduled'}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.routeLabel}>YOUR ASSIGNED ROUTE</Text>
+              <Text style={styles.routeNameText} numberOfLines={2}>
+                {routeDiscovery?.routeName || route?.name || 'No Route Assigned'}
               </Text>
             </View>
-          )}
+          </View>
 
-          {/* Action Track Button */}
-          <TouchableOpacity
-            style={[styles.trackBtn, shadows.primaryGlow]}
-            onPress={() => router.push('/(student)/tracking')}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="navigate" size={18} color="#ffffff" />
-            <Text style={styles.trackBtnText}>TRACK LIVE BUS</Text>
-          </TouchableOpacity>
+          <View style={styles.stopDivider} />
+
+          <View style={styles.stopRow}>
+            <View style={styles.stopPinCircle}>
+              <Ionicons name="location" size={16} color="#ffffff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.stopLabel}>YOUR BOARDING STOP</Text>
+              <Text style={styles.stopNameText}>
+                {stop ? `${stop.sequence ? `Stop #${stop.sequence}: ` : ''}${stop.name}` : 'Unassigned Stop'}
+              </Text>
+            </View>
+            {userLocation && stop && (
+              <Text style={styles.stopDistanceText}>
+                {formatDistance(calculateDistanceKm(userLocation.latitude, userLocation.longitude, stop.latitude, stop.longitude))}
+              </Text>
+            )}
+          </View>
         </View>
 
-        {/* Live Mini Map Preview */}
+        {/* AUTOMATIC BOARDING DETECTION STATUS */}
+        {renderBoardingChip()}
+
+        {/* ACTIVE BUSES ON ROUTE (DYNAMIC MULTI-BUS LIST SORTED BY ETA) */}
+        <View style={styles.sectionHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="bus" size={18} color={colors.primary} />
+            <Text style={styles.sectionTitle}>ACTIVE BUSES ON YOUR ROUTE</Text>
+          </View>
+          <Text style={styles.busCountBadge}>{activeBuses.length} Live</Text>
+        </View>
+
+        {loading && !refreshing ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>Discovering active buses on route…</Text>
+          </View>
+        ) : activeBuses.length === 0 ? (
+          <View style={styles.emptyBusCard}>
+            <Ionicons name="time-outline" size={32} color={colors.textMuted} />
+            <Text style={styles.emptyBusTitle}>No active buses currently on your route</Text>
+            <Text style={styles.emptyBusSub}>
+              Buses will appear here as soon as drivers initiate transit trips on this route.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ gap: 12, marginBottom: 20 }}>
+            {activeBuses.map((busItem: ETAPredictionData, idx: number) => {
+              const isFirst = idx === 0;
+              return (
+                <TouchableOpacity
+                  key={busItem.busId}
+                  style={[
+                    styles.busCard,
+                    isFirst && { borderColor: colors.primary, borderWidth: 1.5 },
+                  ]}
+                  onPress={() => router.push('/(student)/tracking')}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.busCardTop}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View style={[styles.busNumberPill, isFirst && { backgroundColor: colors.primary }]}>
+                        <Text style={[styles.busNumberPillText, isFirst && { color: '#ffffff' }]}>
+                          BUS {busItem.busNumber}
+                        </Text>
+                      </View>
+                      {isFirst && (
+                        <View style={styles.earliestBadge}>
+                          <Text style={styles.earliestText}>EARLIEST ARRIVAL</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.etaDisplayBadge}>
+                      <Ionicons name="time" size={14} color={colors.primary} />
+                      <Text style={styles.etaDisplayText}>
+                        {busItem.etaFormatted === 'ARRIVED' ? 'ARRIVED' : `${busItem.etaMinutes} MIN`}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.busCardDetails}>
+                    <View style={styles.busDetailItem}>
+                      <Text style={styles.busDetailLabel}>Distance</Text>
+                      <Text style={styles.busDetailVal}>{busItem.distanceFormatted}</Text>
+                    </View>
+                    <View style={styles.busDetailDivider} />
+                    <View style={styles.busDetailItem}>
+                      <Text style={styles.busDetailLabel}>Speed</Text>
+                      <Text style={styles.busDetailVal}>{Math.round(busItem.currentSpeedKmh || 0)} km/h</Text>
+                    </View>
+                    <View style={styles.busDetailDivider} />
+                    <View style={styles.busDetailItem}>
+                      <Text style={styles.busDetailLabel}>Stops Away</Text>
+                      <Text style={styles.busDetailVal}>{busItem.stopsRemaining} stops</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* LIVE MAP PREVIEW */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>LIVE MAP PREVIEW</Text>
           <TouchableOpacity onPress={() => router.push('/(student)/tracking')}>
-            <Text style={styles.seeAllText}>Full Screen</Text>
+            <Text style={styles.seeAllText}>Full Interactive Map</Text>
           </TouchableOpacity>
         </View>
 
         <LiveMiniMap
-          busLocation={latestLoc}
+          busLocation={
+            activeBuses[0]?.currentLocation
+              ? {
+                  latitude: activeBuses[0].currentLocation.latitude,
+                  longitude: activeBuses[0].currentLocation.longitude,
+                  speed: activeBuses[0].currentLocation.speed ?? undefined,
+                  heading: activeBuses[0].currentLocation.heading ?? undefined,
+                }
+              : null
+          }
           userLocation={userLocation}
           stops={sortedStops}
           assignedStop={stop}
-          busNumber={bus?.busNumber}
+          busNumber={activeBuses[0]?.busNumber || 'Fleet'}
           onExpandMap={() => router.push('/(student)/tracking')}
         />
 
-        {/* Next Stop & Route Progress Card */}
-        <View style={styles.nextStopCard}>
-          <View style={styles.nextStopHeader}>
-            <View style={styles.stopIconCircle}>
-              <Ionicons name="pin" size={18} color={colors.success} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.nextStopTag}>NEXT STOP</Text>
-              <Text style={styles.nextStopTitle}>{nextStopName}</Text>
-            </View>
-            <View style={styles.nextStopEtaChip}>
-              <Text style={styles.nextStopEtaText}>{nextStopEta}</Text>
-            </View>
-          </View>
+        {/* ACTION BUTTON */}
+        <TouchableOpacity
+          style={[styles.trackBtn, shadows.primaryGlow]}
+          onPress={() => router.push('/(student)/tracking')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="navigate" size={18} color="#ffffff" />
+          <Text style={styles.trackBtnText}>OPEN MULTI-BUS LIVE MAP</Text>
+        </TouchableOpacity>
 
-          {stop && (
-            <View style={styles.userStopRow}>
-              <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-              <Text style={styles.userStopText}>
-                Your Assigned Stop: <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>{stop.sequence}. {stop.name}</Text>
-                {userLocation && (
-                  <Text style={{ color: colors.textSecondary, fontWeight: '500' }}>
-                    {' '}· {formatDistance(calculateDistanceKm(userLocation.latitude, userLocation.longitude, stop.latitude, stop.longitude))}
-                  </Text>
-                )}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Transportation Details & Quick Actions */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>TRANSPORTATION DETAILS</Text>
-          <TouchableOpacity onPress={() => setShowBusDetails(true)}>
-            <Text style={styles.seeAllText}>View Specs</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* QUICK NAVIGATION TILES */}
         <View style={styles.grid}>
-          <TouchableOpacity
-            style={styles.gridCard}
-            onPress={() => setShowBusDetails(true)}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.gridIconBox, { backgroundColor: colors.primaryGlow }]}>
-              <Ionicons name="bus-outline" size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.gridLabel}>Vehicle Fleet</Text>
-            <Text style={styles.gridValue}>{bus?.busNumber ? `BUS ${bus.busNumber}` : 'Unassigned'}</Text>
-            <Text style={styles.gridSub}>{bus?.registrationNumber || 'College Bus'}</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.gridCard}
             onPress={() => router.push('/(student)/route')}
             activeOpacity={0.8}
           >
-            <View style={[styles.gridIconBox, { backgroundColor: colors.indigoGlow }]}>
-              <Ionicons name="git-commit-outline" size={20} color={colors.indigo} />
+            <View style={[styles.gridIconBox, { backgroundColor: colors.primaryGlow }]}>
+              <Ionicons name="git-commit-outline" size={20} color={colors.primary} />
             </View>
-            <Text style={styles.gridLabel}>Route Stops</Text>
+            <Text style={styles.gridLabel}>Route Timeline</Text>
             <Text style={styles.gridValue}>{sortedStops.length} Total Stops</Text>
-            <Text style={styles.gridSub}>View Timeline</Text>
+            <Text style={styles.gridSub}>View full stop sequence</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => router.push('/(student)/profile')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIconBox, { backgroundColor: colors.indigoGlow }]}>
+              <Ionicons name="person-outline" size={20} color={colors.indigo} />
+            </View>
+            <Text style={styles.gridLabel}>Transit Profile</Text>
+            <Text style={styles.gridValue}>Student Details</Text>
+            <Text style={styles.gridSub}>Route & Stop settings</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -308,24 +516,11 @@ export default function StudentHomeScreen() {
         userId={user?.id || ''}
         userName={user?.name || ''}
         userRole="STUDENT"
-        busNumber={bus?.busNumber}
+        busNumber={activeBuses[0]?.busNumber || 'Assigned Route Bus'}
         routeName={route?.name}
-        latitude={latestLoc?.latitude || 28.367}
-        longitude={latestLoc?.longitude || 79.4304}
+        latitude={userLocation?.latitude || 28.367}
+        longitude={userLocation?.longitude || 79.4304}
         stopName={stop?.name}
-      />
-
-      {/* Bus Details Modal */}
-      <BusDetailsModal
-        visible={showBusDetails}
-        onClose={() => setShowBusDetails(false)}
-        bus={bus}
-        route={fullRoute || route}
-        activeTrip={activeTrip}
-        latestLoc={latestLoc}
-        nextStopName={nextStopName}
-        etaText={nextStopEta}
-        distanceText={formatDistance(distanceKm)}
       />
     </SafeAreaView>
   );
@@ -379,7 +574,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
     borderRadius: 16,
     padding: 14,
-    marginBottom: 18,
+    marginBottom: 16,
     gap: 12,
   },
   sosIconCircle: {
@@ -401,190 +596,247 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.85)',
     marginTop: 2,
   },
-  mainCard: {
+  routeHeaderCard: {
     backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 20,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 20,
+    marginBottom: 14,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  busHeaderLeft: {
+  routeHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
   },
-  busIconBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+  routeIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: colors.primaryGlow,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  busTitle: {
-    fontSize: 19,
-    fontWeight: '900',
+  routeLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  routeNameText: {
+    fontSize: 15,
+    fontWeight: '800',
     color: colors.textPrimary,
-  },
-  routeName: {
-    fontSize: 12,
-    color: colors.textSecondary,
     marginTop: 2,
-    maxWidth: 160,
   },
-  arrivalBox: {
+  stopDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: 12,
+  },
+  stopRow: {
     flexDirection: 'row',
-    backgroundColor: colors.backgroundSecondary,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginBottom: 16,
+    alignItems: 'center',
+    gap: 10,
   },
-  arrivalCol: {
-    flex: 1,
+  stopPinCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  arrivalDivider: {
-    width: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: 4,
-  },
-  arrivalLabel: {
+  stopLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    color: colors.textSecondary,
   },
-  arrivalValue: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: colors.primary,
-    marginTop: 4,
-  },
-  distanceValue: {
-    fontSize: 18,
-    fontWeight: '800',
+  stopNameText: {
+    fontSize: 13.5,
+    fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 6,
+    marginTop: 1,
   },
-  idleArrivalBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.backgroundSecondary,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginBottom: 16,
-  },
-  idleText: {
+  stopDistanceText: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: colors.primary,
     fontWeight: '600',
   },
-  trackBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    height: 50,
+  boardingCard: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 18,
+    gap: 10,
   },
-  trackBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
+  boardingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  boardingTitle: {
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+  },
+  boardingSub: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
-    marginTop: 6,
   },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textMuted,
-    letterSpacing: 0.8,
-  },
-  seeAllText: {
     fontSize: 12,
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  nextStopCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 20,
-  },
-  nextStopHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  stopIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: colors.successGlow,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nextStopTag: {
-    fontSize: 10,
     fontWeight: '800',
-    color: colors.success,
+    color: colors.textSecondary,
     letterSpacing: 0.5,
   },
-  nextStopTitle: {
-    fontSize: 15,
+  busCountBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.primaryGlow,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  loadingBox: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  emptyBusCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 18,
+  },
+  emptyBusTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  emptyBusSub: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  busCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  busCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  busNumberPill: {
+    backgroundColor: colors.backgroundSecondary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  busNumberPillText: {
+    fontSize: 13,
     fontWeight: '800',
     color: colors.textPrimary,
-    marginTop: 2,
   },
-  nextStopEtaChip: {
-    backgroundColor: colors.backgroundSecondary,
+  earliestBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  earliestText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#10b981',
+  },
+  etaDisplayBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primaryGlow,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
   },
-  nextStopEtaText: {
-    fontSize: 11,
-    fontWeight: '800',
+  etaDisplayText: {
+    fontSize: 13,
+    fontWeight: '900',
     color: colors.primary,
   },
-  userStopRow: {
+  busCardDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: colors.backgroundSecondary,
+    borderRadius: 10,
+    padding: 10,
+  },
+  busDetailItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  busDetailDivider: {
+    width: 1,
+    backgroundColor: colors.borderLight,
+  },
+  busDetailLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+  },
+  busDetailVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  seeAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  trackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 14,
+    marginBottom: 20,
     gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
-  userStopText: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  trackBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 0.5,
   },
   grid: {
     flexDirection: 'row',
@@ -594,7 +846,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -608,9 +860,8 @@ const styles = StyleSheet.create({
   },
   gridLabel: {
     fontSize: 10,
-    color: colors.textMuted,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   gridValue: {
     fontSize: 14,
@@ -621,6 +872,6 @@ const styles = StyleSheet.create({
   gridSub: {
     fontSize: 11,
     color: colors.textMuted,
-    marginTop: 4,
+    marginTop: 2,
   },
 });

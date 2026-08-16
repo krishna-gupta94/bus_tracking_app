@@ -11,8 +11,13 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "BusTracker uses your location to show your position on the transit map, identify your nearest bus stop, and provide accurate arrival estimates.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "BusTracker uses background location for drivers during active bus trips to broadcast coordinates."
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSLocationWhenInUseUsageDescription": "SmartBus uses your location to show your position on the transit map, identify your nearest bus stop, and provide accurate arrival estimates.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SmartBus requires background location while driving active trips so students and administrators receive real-time bus arrival coordinates even when the phone is locked or in the background.",
+        "NSLocationAlwaysUsageDescription": "SmartBus requires background location while driving active trips to broadcast coordinates."
       }
     },
     "android": {
@@ -23,11 +28,16 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "WAKE_LOCK",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.WAKE_LOCK"
       ],
       "package": "com.anonymous.collegebustracker"
     },
@@ -36,7 +46,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "BusTracker uses your location to display your position on the map and find your nearest bus stop.",
+          "locationAlwaysAndWhenInUsePermission": "SmartBus requires background location while driving active trips so students and administrators receive real-time bus arrival coordinates even when the phone is locked or in the background.",
+          "locationAlwaysPermission": "SmartBus requires background location while driving active trips to share live transit coordinates with students.",
+          "locationWhenInUsePermission": "SmartBus uses your location to display your position and broadcast transit coordinates during active trips.",
+          "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
       ]

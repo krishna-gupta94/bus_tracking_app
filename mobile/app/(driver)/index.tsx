@@ -9,8 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
-import * as Location from 'expo-location';
 import { useAuth } from '../../src/context/AuthContext';
 import { mobileApi } from '../../src/services/api';
 import { io, Socket } from 'socket.io-client';
@@ -19,6 +19,16 @@ import { colors, shadows } from '../../src/theme/colors';
 import { StatusBadge } from '../../src/components/StatusBadge';
 import { EmergencyModal } from '../../src/components/EmergencyModal';
 import { getNextStop } from '../../src/services/busService';
+import {
+  startDriverBackgroundLocation,
+  stopDriverBackgroundLocation,
+  isDriverBackgroundLocationActive,
+  requestDriverLocationPermissions,
+  subscribeToDriverLocationUpdates,
+  subscribeToDriverDiagnostics,
+  refreshDiagnosticState,
+  DriverDiagnostics,
+} from '../../src/services/driverLocationTask';
 
 export default function DriverHomeScreen() {
   const { user, refreshUserData, serverUrl } = useAuth();
@@ -30,8 +40,24 @@ export default function DriverHomeScreen() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [tripSeconds, setTripSeconds] = useState(0);
   const [showSOSModal, setShowSOSModal] = useState(false);
+  const [isBgActive, setIsBgActive] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(true);
+  const [diagnostics, setDiagnostics] = useState<DriverDiagnostics>({
+    gpsService: 'OFF',
+    foregroundPermission: 'UNDETERMINED',
+    backgroundPermission: 'UNDETERMINED',
+    locationServices: 'OFF',
+    backgroundTaskRegistered: 'NOT REGISTERED',
+    backgroundTaskStarted: 'STOPPED',
+    tripStatus: 'INACTIVE',
+    lastGpsCoords: null,
+    lastGpsTimestamp: null,
+    lastBackendUploadTimestamp: null,
+    lastBackendUploadStatus: 'IDLE',
+    lastBackendUploadError: null,
+    packetsSent: 0,
+  });
 
-  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const timerRef = useRef<any>(null);
 
@@ -39,6 +65,28 @@ export default function DriverHomeScreen() {
   const bus = driver?.bus;
   const route = bus?.route;
   const stops = route?.stops ? [...route.stops].sort((a: any, b: any) => a.sequence - b.sequence) : [];
+
+  // Listen for background task coordinate dispatches & diagnostic updates
+  useEffect(() => {
+    const unsubLoc = subscribeToDriverLocationUpdates((loc) => {
+      setCurrentCoords({ latitude: loc.latitude, longitude: loc.longitude });
+      setUpdateCount((c) => c + 1);
+      setGpsError(null);
+      setIsBgActive(true);
+    });
+
+    const unsubDiag = subscribeToDriverDiagnostics((diag) => {
+      setDiagnostics(diag);
+      setIsBgActive(diag.backgroundTaskStarted === 'RUNNING');
+    });
+
+    refreshDiagnosticState();
+
+    return () => {
+      unsubLoc();
+      unsubDiag();
+    };
+  }, []);
 
   const loadTripData = useCallback(async () => {
     await refreshUserData();
@@ -52,12 +100,30 @@ export default function DriverHomeScreen() {
         const start = new Date(running.startTime).getTime();
         const now = Date.now();
         setTripSeconds(Math.max(0, Math.floor((now - start) / 1000)));
+
+        // Ensure background task is running
+        if (bus?.id && driver?.id) {
+          const bgActive = await isDriverBackgroundLocationActive();
+          setIsBgActive(bgActive);
+          if (!bgActive) {
+            const startRes = await startDriverBackgroundLocation(running.id, bus.id, driver.id);
+            if (startRes.success) {
+              setIsBgActive(true);
+              setGpsError(null);
+            } else {
+              setGpsError(startRes.error || 'Failed to auto-resume background GPS tracking');
+            }
+          }
+        }
       } else {
         setActiveTrip(null);
         setTripSeconds(0);
+        setIsBgActive(false);
+        await stopDriverBackgroundLocation();
       }
     } catch (e) {}
-  }, []);
+    await refreshDiagnosticState();
+  }, [bus?.id, driver?.id, refreshUserData]);
 
   useEffect(() => {
     loadTripData();
@@ -67,7 +133,6 @@ export default function DriverHomeScreen() {
     socketRef.current = socket;
 
     return () => {
-      stopGpsWatcher();
       socket.disconnect();
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -96,70 +161,6 @@ export default function DriverHomeScreen() {
     return `${pad(mins)}:${pad(secs)}`;
   };
 
-  const startGpsWatcher = async (tripId: string, busId: string) => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setGpsError('GPS location permission is required for bus tracking.');
-        Alert.alert('Permission Required', 'Please enable Location access in device settings.');
-        return false;
-      }
-
-      setGpsError(null);
-      const enabled = await Location.hasServicesEnabledAsync();
-      if (!enabled) {
-        setGpsError('GPS location services are disabled on your phone.');
-        Alert.alert('GPS Disabled', 'Please enable device GPS / Location services.');
-        return false;
-      }
-
-      const sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 8000,
-          distanceInterval: 5,
-        },
-        (loc) => {
-          const { latitude, longitude, speed, heading, accuracy } = loc.coords;
-          setCurrentCoords({ latitude, longitude });
-          setUpdateCount((c) => c + 1);
-
-          // Convert speed from m/s to km/h (if available)
-          const speedKmh = typeof speed === 'number' && speed >= 0 ? Math.round(speed * 3.6 * 10) / 10 : undefined;
-
-          const payload = {
-            latitude,
-            longitude,
-            tripId,
-            busId,
-            speed: speedKmh,
-            heading: typeof heading === 'number' ? Math.round(heading) : undefined,
-            accuracy: typeof accuracy === 'number' ? Math.round(accuracy) : undefined,
-          };
-
-          mobileApi.post('/locations/update', payload).catch(() => {});
-
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('location:send', payload);
-          }
-        }
-      );
-
-      locationSubscription.current = sub;
-      return true;
-    } catch (e: any) {
-      setGpsError('Failed to start GPS tracking: ' + e.message);
-      return false;
-    }
-  };
-
-  const stopGpsWatcher = () => {
-    if (locationSubscription.current) {
-      locationSubscription.current.remove();
-      locationSubscription.current = null;
-    }
-  };
-
   const handleStartTrip = async () => {
     if (!bus) {
       Alert.alert('No Bus Assigned', 'You do not have a bus assigned. Contact system administrator.');
@@ -169,8 +170,51 @@ export default function DriverHomeScreen() {
       Alert.alert('No Route Assigned', 'Your bus does not have a route assigned. Contact system administrator.');
       return;
     }
+    if (!driver) {
+      Alert.alert('Driver Error', 'Driver profile could not be loaded.');
+      return;
+    }
 
     setLoading(true);
+    try {
+      // 1. Request foreground and background location permissions
+      const perm = await requestDriverLocationPermissions();
+      if (!perm.foregroundGranted) {
+        Alert.alert(
+          'Location Permission Required',
+          perm.error || 'SmartBus requires GPS location permission to track your bus route.'
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!perm.backgroundGranted) {
+        Alert.alert(
+          'Background Location Recommended',
+          'SmartBus needs "Allow all the time" location access so students receive live bus coordinates when your screen is locked or you switch to a navigation app.',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => setLoading(false) },
+            {
+              text: 'Start Trip Anyway',
+              onPress: async () => {
+                await executeStartTrip();
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      await executeStartTrip();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Failed to start trip.';
+      Alert.alert('Cannot Start Trip', msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const executeStartTrip = async () => {
     try {
       const res = await mobileApi.post('/trips/start');
       const trip = res.data.data;
@@ -178,15 +222,26 @@ export default function DriverHomeScreen() {
       setUpdateCount(0);
       setTripSeconds(0);
 
-      const ok = await startGpsWatcher(trip.id, bus.id);
-      if (ok) {
-        Alert.alert('Trip Started', `Bus ${bus.busNumber} is now live on ${route.name}. GPS is streaming.`);
+      const bgRes = await startDriverBackgroundLocation(trip.id, bus.id, driver.id);
+      if (!bgRes.success) {
+        setIsBgActive(false);
+        setGpsError(bgRes.error || 'Background location could not be started');
+        Alert.alert(
+          'Background GPS Notice',
+          'Trip is active, but background service could not start: ' + bgRes.error
+        );
+      } else {
+        setIsBgActive(true);
+        setGpsError(null);
+        Alert.alert(
+          'Trip Started 🚌',
+          `Bus ${bus.busNumber} is now live on ${route.name}. Background location service is active and will continue broadcasting when phone is locked.`
+        );
       }
+      await refreshDiagnosticState();
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to start trip.';
+      const msg = err.response?.data?.message || err.message || 'Failed to start trip.';
       Alert.alert('Cannot Start Trip', msg);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -199,12 +254,15 @@ export default function DriverHomeScreen() {
         onPress: async () => {
           setLoading(true);
           try {
-            stopGpsWatcher();
+            await stopDriverBackgroundLocation();
             await mobileApi.post('/trips/end');
             setActiveTrip(null);
             setCurrentCoords(null);
             setTripSeconds(0);
-            Alert.alert('Trip Concluded', 'Trip successfully marked as completed.');
+            setUpdateCount(0);
+            setIsBgActive(false);
+            await refreshDiagnosticState();
+            Alert.alert('Trip Concluded', 'Trip successfully marked as completed. Background GPS tracking stopped.');
           } catch (err: any) {
             Alert.alert('Error', err.response?.data?.message || 'Failed to end trip.');
           } finally {
@@ -218,6 +276,7 @@ export default function DriverHomeScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     await loadTripData();
+    await refreshDiagnosticState();
     setRefreshing(false);
   };
 
@@ -245,7 +304,101 @@ export default function DriverHomeScreen() {
           <StatusBadge status={activeTrip ? 'LIVE' : 'IDLE'} />
         </View>
 
-        {/* ACTIVE TRIP DASHBOARD (Optimized for safe driving) */}
+        {/* ── REAL-TIME GPS DIAGNOSTIC HUD ── */}
+        <View style={styles.diagnosticCard}>
+          <TouchableOpacity
+            style={styles.diagHeaderRow}
+            onPress={() => setShowDiagnostics((p) => !p)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="hardware-chip" size={16} color={colors.primary} />
+              <Text style={styles.diagTitle}>GPS & BACKGROUND DIAGNOSTICS</Text>
+            </View>
+            <Ionicons name={showDiagnostics ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          {showDiagnostics && (
+            <View style={styles.diagBody}>
+              <View style={styles.diagGrid}>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>GPS SERVICE</Text>
+                  <Text style={[styles.diagVal, diagnostics.gpsService === 'ON' ? styles.green : styles.red]}>
+                    {diagnostics.gpsService}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>FG PERMISSION</Text>
+                  <Text style={[styles.diagVal, diagnostics.foregroundPermission === 'GRANTED' ? styles.green : styles.red]}>
+                    {diagnostics.foregroundPermission}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>BG PERMISSION</Text>
+                  <Text style={[styles.diagVal, diagnostics.backgroundPermission === 'GRANTED' ? styles.green : styles.amber]}>
+                    {diagnostics.backgroundPermission}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>LOCATION SERVICES</Text>
+                  <Text style={[styles.diagVal, diagnostics.locationServices === 'ON' ? styles.green : styles.red]}>
+                    {diagnostics.locationServices}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>BG TASK</Text>
+                  <Text style={[styles.diagVal, diagnostics.backgroundTaskRegistered === 'REGISTERED' ? styles.green : styles.amber]}>
+                    {diagnostics.backgroundTaskRegistered}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>TASK STATUS</Text>
+                  <Text style={[styles.diagVal, diagnostics.backgroundTaskStarted === 'RUNNING' ? styles.green : styles.muted]}>
+                    {diagnostics.backgroundTaskStarted}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>TRIP STATUS</Text>
+                  <Text style={[styles.diagVal, diagnostics.tripStatus === 'ACTIVE' ? styles.green : styles.muted]}>
+                    {diagnostics.tripStatus}
+                  </Text>
+                </View>
+                <View style={styles.diagItem}>
+                  <Text style={styles.diagLabel}>BACKEND UPLOAD</Text>
+                  <Text style={[styles.diagVal, diagnostics.lastBackendUploadStatus === 'SUCCESS' ? styles.green : diagnostics.lastBackendUploadStatus === 'FAILED' ? styles.red : styles.muted]}>
+                    {diagnostics.lastBackendUploadStatus}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Coordinates & Timestamps */}
+              <View style={styles.diagDetailRow}>
+                <Text style={styles.diagDetailLabel}>Last GPS:</Text>
+                <Text style={styles.diagDetailVal}>
+                  {diagnostics.lastGpsCoords
+                    ? `${diagnostics.lastGpsCoords.latitude.toFixed(5)}, ${diagnostics.lastGpsCoords.longitude.toFixed(5)}`
+                    : 'Awaiting Fix'}
+                </Text>
+              </View>
+              <View style={styles.diagDetailRow}>
+                <Text style={styles.diagDetailLabel}>GPS Timestamp:</Text>
+                <Text style={styles.diagDetailVal}>{diagnostics.lastGpsTimestamp || 'None'}</Text>
+              </View>
+              <View style={styles.diagDetailRow}>
+                <Text style={styles.diagDetailLabel}>Upload Timestamp:</Text>
+                <Text style={styles.diagDetailVal}>{diagnostics.lastBackendUploadTimestamp || 'None'}</Text>
+              </View>
+              {diagnostics.lastBackendUploadError && (
+                <View style={styles.diagDetailRow}>
+                  <Text style={[styles.diagDetailLabel, { color: colors.danger }]}>Upload Error:</Text>
+                  <Text style={[styles.diagDetailVal, { color: colors.danger }]}>{diagnostics.lastBackendUploadError}</Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* ACTIVE TRIP DASHBOARD (Optimized for safe driving & background tracking) */}
         {activeTrip ? (
           <>
             {/* Live GPS Broadcast Status Box */}
@@ -253,6 +406,20 @@ export default function DriverHomeScreen() {
               <View style={styles.activeTopRow}>
                 <View style={styles.livePulseDot} />
                 <Text style={styles.activeTitle}>LIVE GPS BROADCASTING ACTIVE</Text>
+              </View>
+
+              {/* Background Status Chip */}
+              <View style={styles.bgStatusChip}>
+                <Ionicons
+                  name={isBgActive ? 'shield-checkmark' : 'warning'}
+                  size={14}
+                  color={isBgActive ? '#10b981' : '#f59e0b'}
+                />
+                <Text style={[styles.bgStatusText, { color: isBgActive ? '#10b981' : '#f59e0b' }]}>
+                  {isBgActive
+                    ? 'BACKGROUND SERVICE RUNNING (Screen lock & minimize supported)'
+                    : 'BACKGROUND SERVICE STARTING…'}
+                </Text>
               </View>
 
               {/* Big Duration Timer */}
@@ -266,14 +433,14 @@ export default function DriverHomeScreen() {
                 <View style={styles.telemetryCard}>
                   <Ionicons name="radio" size={16} color={colors.success} />
                   <Text style={styles.telemetryLabel}>GPS PACKETS</Text>
-                  <Text style={styles.telemetryVal}>{updateCount}</Text>
+                  <Text style={styles.telemetryVal}>{diagnostics.packetsSent || updateCount}</Text>
                 </View>
 
                 <View style={styles.telemetryCard}>
                   <Ionicons name="navigate" size={16} color={colors.primary} />
                   <Text style={styles.telemetryLabel}>LATITUDE</Text>
                   <Text style={styles.telemetryVal}>
-                    {currentCoords ? currentCoords.latitude.toFixed(4) : 'Acquiring...'}
+                    {currentCoords ? currentCoords.latitude.toFixed(4) : 'Broadcasting…'}
                   </Text>
                 </View>
 
@@ -281,7 +448,7 @@ export default function DriverHomeScreen() {
                   <Ionicons name="compass" size={16} color={colors.primary} />
                   <Text style={styles.telemetryLabel}>LONGITUDE</Text>
                   <Text style={styles.telemetryVal}>
-                    {currentCoords ? currentCoords.longitude.toFixed(4) : 'Acquiring...'}
+                    {currentCoords ? currentCoords.longitude.toFixed(4) : 'Broadcasting…'}
                   </Text>
                 </View>
               </View>
@@ -299,7 +466,7 @@ export default function DriverHomeScreen() {
               )}
 
               <Text style={styles.safeDrivingNotice}>
-                🛡️ Hands-free tracking active. Your phone automatically streams real-time coordinates to students and campus admin.
+                🛡️ Hands-free background tracking active. You can switch to Google Maps or lock your phone — live coordinates will continue broadcasting to students.
               </Text>
             </View>
 
@@ -439,7 +606,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     marginTop: 4,
   },
   roleTag: {
@@ -454,6 +621,73 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 2,
   },
+  diagnosticCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    marginBottom: 16,
+  },
+  diagHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  diagTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 0.8,
+  },
+  diagBody: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  diagGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  diagItem: {
+    width: '48%',
+    backgroundColor: colors.backgroundSecondary,
+    padding: 8,
+    borderRadius: 8,
+  },
+  diagLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: colors.textMuted,
+  },
+  diagVal: {
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  diagDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  diagDetailLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  diagDetailVal: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    maxWidth: '65%',
+  },
+  green: { color: '#10b981' },
+  red: { color: '#ef4444' },
+  amber: { color: '#f59e0b' },
+  muted: { color: colors.textMuted },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,
@@ -487,9 +721,8 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 11,
-    color: colors.textMuted,
     fontWeight: '700',
-    textTransform: 'uppercase',
+    color: colors.textMuted,
   },
   infoVal: {
     fontSize: 15,
@@ -498,102 +731,88 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   subDetail: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2,
   },
   stopListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    gap: 10,
+    gap: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
   stopSeqBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.surfaceElevated,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   stopSeqText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color: colors.textSecondary,
+    color: '#ffffff',
   },
   stopListName: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textPrimary,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.dangerGlow,
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 12,
-    flex: 1,
-  },
-  startBtn: {
-    backgroundColor: colors.success,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    height: 56,
-    borderRadius: 16,
-  },
-  startBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.5,
   },
   activeConsoleCard: {
     backgroundColor: colors.surface,
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 20,
     borderWidth: 1.5,
-    borderColor: colors.success,
+    borderColor: colors.primary,
     marginBottom: 18,
   },
   activeTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   livePulseDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.success,
+    backgroundColor: '#10b981',
   },
   activeTitle: {
     fontSize: 12,
     fontWeight: '900',
-    color: colors.success,
+    color: colors.primary,
     letterSpacing: 0.8,
+  },
+  bgStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.backgroundSecondary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bgStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    flex: 1,
   },
   timerBox: {
     backgroundColor: colors.backgroundSecondary,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   timerLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     color: colors.textMuted,
     letterSpacing: 0.8,
@@ -601,32 +820,30 @@ const styles = StyleSheet.create({
   timerValue: {
     fontSize: 36,
     fontWeight: '900',
-    color: colors.textPrimary,
+    color: '#ffffff',
     marginTop: 4,
-    fontVariant: ['tabular-nums'],
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   telemetryGrid: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   telemetryCard: {
     flex: 1,
     backgroundColor: colors.backgroundSecondary,
-    padding: 10,
     borderRadius: 12,
+    padding: 10,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   telemetryLabel: {
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 8,
+    fontWeight: '800',
     color: colors.textMuted,
     marginTop: 4,
   },
   telemetryVal: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
     color: colors.textPrimary,
     marginTop: 2,
@@ -635,29 +852,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: colors.backgroundSecondary,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderRadius: 12,
     padding: 12,
-    borderRadius: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginBottom: 14,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   nextStopBarLabel: {
     fontSize: 9,
     fontWeight: '800',
-    color: colors.success,
+    color: '#10b981',
     letterSpacing: 0.5,
   },
   nextStopBarName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
-    color: colors.textPrimary,
-    marginTop: 2,
+    color: '#ffffff',
+    marginTop: 1,
   },
   nextStopBarSeq: {
     fontSize: 11,
-    fontWeight: '700',
-    color: colors.textMuted,
+    fontWeight: '800',
+    color: '#10b981',
   },
   safeDrivingNotice: {
     fontSize: 11,
@@ -667,17 +884,17 @@ const styles = StyleSheet.create({
   },
   activeActionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   driverSOSBtn: {
     flex: 1,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: colors.danger,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    backgroundColor: colors.danger,
+    borderRadius: 16,
+    paddingVertical: 16,
   },
   driverSOSText: {
     color: '#ffffff',
@@ -687,20 +904,50 @@ const styles = StyleSheet.create({
   },
   endTripBtn: {
     flex: 1.2,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    backgroundColor: '#dc2626',
+    borderRadius: 16,
+    paddingVertical: 16,
   },
   endTripText: {
-    color: colors.textPrimary,
-    fontSize: 13,
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  startBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    paddingVertical: 18,
+  },
+  startBtnText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.danger,
+    fontWeight: '600',
   },
 });

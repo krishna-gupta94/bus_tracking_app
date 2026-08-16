@@ -50,6 +50,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (savedToken && savedUser) {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
+        // Verify session validity with backend
+        mobileApi.get('/auth/me')
+          .then(res => {
+            if (res.data?.data) {
+              setUser(res.data.data);
+              AsyncStorage.setItem('user_data', JSON.stringify(res.data.data));
+            }
+          })
+          .catch(err => {
+            if (err?.response?.status === 401) {
+              logout();
+            }
+          });
       }
     } catch (e) {
       console.log('Failed loading session', e);
@@ -74,7 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u = res.data.data;
       setUser(u);
       await AsyncStorage.setItem('user_data', JSON.stringify(u));
-    } catch (e) {}
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        await logout();
+      }
+    }
   };
 
   const logout = async () => {

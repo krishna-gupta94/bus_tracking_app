@@ -11,7 +11,29 @@ export interface Stop {
   sequence: number;
 }
 
-export interface ETAPredictionData {
+export type BoardingStatus =
+  | 'BOARDED_ASSIGNED_ROUTE_BUS'
+  | 'BOARDED_OTHER_ROUTE_BUS'
+  | 'LIKELY_BOARDED'
+  | 'NOT_BOARDED'
+  | 'UNKNOWN';
+
+export interface BoardingStatusData {
+  studentId: string;
+  studentName: string;
+  assignedRouteId: string | null;
+  assignedRouteName: string;
+  assignedStopId: string | null;
+  assignedStopName: string;
+  detectedBusId: string | null;
+  detectedBusNumber: string | null;
+  status: BoardingStatus;
+  confidence: number;
+  verificationDetails: string;
+  timestamp: string;
+}
+
+export interface ActiveBusSummary {
   busId: string;
   busNumber: string;
   tripId: string | null;
@@ -19,8 +41,6 @@ export interface ETAPredictionData {
   routeName: string;
   targetStopId: string;
   targetStopName: string;
-  nextStopId: string | null;
-  nextStopName: string;
   etaMinutes: number;
   etaSeconds: number;
   etaFormatted: string;
@@ -28,14 +48,37 @@ export interface ETAPredictionData {
   distanceMeters: number;
   distanceFormatted: string;
   currentSpeedKmh: number;
-  effectiveSpeedKmh: number;
   confidence: number;
   confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW';
   status: 'ON_TIME' | 'SLIGHTLY_DELAYED' | 'DELAYED' | 'BUS_STOPPED' | 'GPS_UNAVAILABLE' | 'OFFLINE';
   lastUpdatedSecondsAgo: number;
   stopsRemaining: number;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+    speed?: number | null;
+    heading?: number | null;
+    timestamp?: string | null;
+  } | null;
   updatedAt: string;
 }
+
+export type ETAPredictionData = ActiveBusSummary;
+
+export interface RouteDiscoveryResult {
+  routeId: string;
+  routeName: string;
+  targetStopId: string;
+  targetStopName: string;
+  activeBuses: ETAPredictionData[];
+  offlineBuses: Array<{ busId: string; busNumber: string; registrationNumber: string; status: string }>;
+  sortedBuses: ETAPredictionData[];
+  totalActive: number;
+  studentStop?: Stop | null;
+  assignedRoute?: { id: string; name: string; stops?: Stop[] } | null;
+  updatedAt: string;
+}
+
 
 // Haversine Distance in Kilometers
 export function calculateDistanceKm(

@@ -3,9 +3,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
-  Plus, Search, Edit2, Trash2, X, UserCheck,
-  Bus as BusIcon, MapPin, Route as RouteIcon, Calendar, Clock, Loader2,
-  AlertTriangle, CheckCircle2, XCircle, KeyRound
+  Plus, Search, Edit2, Trash2, UserCheck,
+  MapPin, Route as RouteIcon, Clock, Loader2,
+  AlertTriangle, CheckCircle2, XCircle, KeyRound, ShieldAlert
 } from 'lucide-react';
 import ResetPasswordModal from '@/components/ResetPasswordModal';
 
@@ -16,9 +16,11 @@ interface Student {
   courseEndYear?: number | null;
   accountExpirationDate?: string | null;
   accountStatus?: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | string;
-  assignedBusId?: string | null;
   assignedRouteId?: string | null;
   assignedStopId?: string | null;
+  boardingStatus?: 'BOARDED_ASSIGNED_ROUTE_BUS' | 'BOARDED_OTHER_ROUTE_BUS' | 'LIKELY_BOARDED' | 'NOT_BOARDED' | 'UNKNOWN' | string;
+  boardingConfidence?: number;
+  detectedBusNumber?: string | null;
   user: {
     id: string;
     name: string;
@@ -26,16 +28,11 @@ interface Student {
     phone?: string | null;
     status: string;
   };
-  assignedBus?: {
-    id: string;
-    busNumber: string;
-    registrationNumber?: string;
-    status?: string;
-  } | null;
   assignedRoute?: {
     id: string;
     name: string;
     stops?: any[];
+    buses?: Array<{ id: string; busNumber: string }>;
   } | null;
   assignedStop?: {
     id: string;
@@ -43,15 +40,6 @@ interface Student {
     sequence?: number;
     address?: string;
   } | null;
-}
-
-interface Bus {
-  id: string;
-  busNumber: string;
-  registrationNumber?: string;
-  status?: string;
-  routeId?: string | null;
-  route?: { id: string; name: string } | null;
 }
 
 interface Stop {
@@ -69,11 +57,11 @@ interface Route {
   name: string;
   description?: string;
   stops: Stop[];
+  buses?: Array<{ id: string; busNumber: string }>;
 }
 
 interface StudentModalProps {
   student: Student | null;
-  buses: Bus[];
   routes: Route[];
   isLoadingData?: boolean;
   onClose: () => void;
@@ -96,7 +84,7 @@ function formatExpirationDate(dateStr?: string | null, endYear?: number | null):
   return '—';
 }
 
-function StudentModal({ student, buses, routes, isLoadingData = false, onClose, onSave }: StudentModalProps) {
+function StudentModal({ student, routes, isLoadingData = false, onClose, onSave }: StudentModalProps) {
   const currentYear = new Date().getFullYear();
 
   const [form, setForm] = useState({
@@ -109,7 +97,6 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
     courseEndYear: currentYear + 2,
     status: 'ACTIVE',
     assignedRouteId: '',
-    assignedBusId: '',
     assignedStopId: '',
   });
 
@@ -118,7 +105,6 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
   useEffect(() => {
     if (student) {
       const initialRouteId = student.assignedRoute?.id || student.assignedRouteId || '';
-      const initialBusId = student.assignedBus?.id || student.assignedBusId || '';
       const initialStopId = student.assignedStop?.id || student.assignedStopId || '';
 
       setForm({
@@ -131,7 +117,6 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
         courseEndYear: student.courseEndYear || currentYear + 2,
         status: student.user?.status || 'ACTIVE',
         assignedRouteId: initialRouteId,
-        assignedBusId: initialBusId,
         assignedStopId: initialStopId,
       });
     } else {
@@ -145,7 +130,6 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
         courseEndYear: currentYear + 4,
         status: 'ACTIVE',
         assignedRouteId: '',
-        assignedBusId: '',
         assignedStopId: '',
       });
     }
@@ -209,18 +193,17 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
         courseEndYear: endYr,
         status: form.status,
         assignedRouteId: form.assignedRouteId || null,
-        assignedBusId: form.assignedBusId || null,
         assignedStopId: form.assignedStopId || null,
       };
 
       if (student) {
         await api.put(`/students/${student.id}`, payload);
-        toast.success('Student details, course duration, and transit updated!');
+        toast.success('Student details, course duration, and transit assignment updated!');
       } else {
         payload.email = form.email.trim().toLowerCase();
         payload.password = form.password;
         await api.post('/students', payload);
-        toast.success('Student registered successfully with course duration!');
+        toast.success('Student registered successfully with Route + Stop assignment!');
       }
 
       onSave();
@@ -238,63 +221,57 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
       <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <h3 className="modal-title">{student ? 'Edit Student' : 'Add New Student'}</h3>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-              {student ? `Manage academic duration & transport for ${student.user?.name}` : 'Register a student with course duration and transit details'}
+            <h2 className="modal-title">{student ? 'Edit Student' : 'Register New Student'}</h2>
+            <p className="modal-subtitle">
+              {student ? `Update profile for ${student.user?.name}` : 'Assign student to Route and Bus Stop with course duration'}
             </p>
           </div>
-          <button onClick={onClose} className="btn btn-ghost btn-icon">
-            <X size={18} />
-          </button>
+          <button className="btn-close" onClick={onClose}>✕</button>
         </div>
 
         <form onSubmit={submit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {/* SECTION 1: Student Information */}
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '72vh', overflowY: 'auto' }}>
+            {/* SECTION 1: Personal & Identity */}
             <div>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                1. Student Information
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                1. Student Identity & Login
               </p>
-
-              <div className="form-row">
+              <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <div className="form-group">
-                  <label className="form-label">Full Name *</label>
+                  <label className="form-label required">Student Full Name</label>
                   <input
                     className="form-input"
                     value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                     required
                     placeholder="e.g. Rahul Sharma"
                   />
-                  <p className="form-hint">Duplicate names allowed</p>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Student ID / Code *</label>
+                  <label className="form-label required">Student ID / Enrollment No.</label>
                   <input
                     className="form-input"
                     value={form.studentCode}
-                    onChange={(e) => setForm((f) => ({ ...f, studentCode: e.target.value }))}
+                    onChange={(e) => setForm({ ...form, studentCode: e.target.value })}
                     required
-                    placeholder="e.g. STU2025001"
+                    placeholder="e.g. STU202201"
                   />
-                  <p className="form-hint">Must be unique (case-insensitive)</p>
                 </div>
               </div>
 
-              <div className="form-row">
+              <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 12 }}>
                 <div className="form-group">
-                  <label className="form-label">Email Address *</label>
+                  <label className="form-label required">Official Email Address</label>
                   <input
                     type="email"
                     className="form-input"
                     value={form.email}
-                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
                     required
                     disabled={!!student}
-                    placeholder="student@college.edu"
+                    placeholder="student@invertis.org"
                   />
-                  <p className="form-hint">{student ? 'Email cannot be changed' : 'Must be unique (case-insensitive)'}</p>
                 </div>
 
                 <div className="form-group">
@@ -302,82 +279,58 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
                   <input
                     className="form-input"
                     value={form.phone}
-                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                    placeholder="e.g. 9411278459"
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="+91-9876543210"
                   />
-                  <p className="form-hint">Must be unique if provided</p>
                 </div>
               </div>
 
               {!student && (
-                <div className="form-group">
-                  <label className="form-label">Login Password *</label>
+                <div className="form-group" style={{ marginTop: 12 }}>
+                  <label className="form-label required">Default Password</label>
                   <input
                     type="password"
                     className="form-input"
                     value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
                     required
                     minLength={6}
                     placeholder="Minimum 6 characters"
                   />
                 </div>
               )}
-
-              {student && (
-                <div className="form-group">
-                  <label className="form-label">Account Status</label>
-                  <select
-                    className="form-select"
-                    value={form.status}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  >
-                    <option value="ACTIVE">ACTIVE</option>
-                    <option value="INACTIVE">INACTIVE</option>
-                  </select>
-                </div>
-              )}
             </div>
 
             {/* SECTION 2: Course Duration */}
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                2. Academic Course Duration & Auto Expiration
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                2. Course Duration & Auto-Expiration
               </p>
-
-              <div className="form-row">
+              <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Calendar size={14} color="var(--primary)" /> Course Starting Year *
-                  </label>
+                  <label className="form-label required">Course Start Year</label>
                   <input
                     type="number"
-                    min={2000}
-                    max={2100}
                     className="form-input"
                     value={form.courseStartYear}
-                    onChange={(e) => setForm((f) => ({ ...f, courseStartYear: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setForm({ ...form, courseStartYear: Number(e.target.value) })}
+                    min={2000}
+                    max={2100}
                     required
-                    placeholder="e.g. 2022"
                   />
-                  <p className="form-hint">4-digit admission year</p>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Clock size={14} color="var(--primary)" /> Course Ending Year *
-                  </label>
+                  <label className="form-label required">Course End Year</label>
                   <input
                     type="number"
-                    min={2000}
-                    max={2100}
                     className="form-input"
                     value={form.courseEndYear}
-                    onChange={(e) => setForm((f) => ({ ...f, courseEndYear: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setForm({ ...form, courseEndYear: Number(e.target.value) })}
+                    min={2000}
+                    max={2100}
                     required
-                    placeholder="e.g. 2026"
                   />
-                  <p className="form-hint">Graduation/completion year</p>
                 </div>
               </div>
 
@@ -389,7 +342,7 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginTop: 4,
+                marginTop: 8,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Clock size={16} color="var(--primary)" />
@@ -403,15 +356,20 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
               </div>
             </div>
 
-            {/* SECTION 3: Transit Assignment */}
+            {/* SECTION 3: Route + Stop Transit Assignment (NO Permanent Bus) */}
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                3. Transport & Transit Assignment
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  3. Route & Bus Stop Assignment
+                </p>
+                <span style={{ fontSize: 11, background: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                  Dynamic Multi-Bus Routing
+                </span>
+              </div>
 
               {isLoadingData ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                  <Loader2 size={16} className="spinner" /> Loading available routes, buses, and stops…
+                  <Loader2 size={16} className="spinner" /> Loading routes and stops…
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -431,30 +389,9 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
                         </option>
                       ))}
                     </select>
-                    <p className="form-hint">Selecting a route enables its corresponding bus stops below.</p>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <BusIcon size={14} color="var(--primary)" /> Assigned Bus
-                    </label>
-                    <select
-                      className="form-select"
-                      value={form.assignedBusId}
-                      onChange={(e) => setForm((f) => ({ ...f, assignedBusId: e.target.value }))}
-                    >
-                      <option value="">None (No bus assigned)</option>
-                      {buses.map((b) => {
-                        const routeLabel = b.route ? ` • Route: ${b.route.name}` : '';
-                        const regLabel = b.registrationNumber ? ` (${b.registrationNumber})` : '';
-                        return (
-                          <option key={b.id} value={b.id}>
-                            🚌 {b.busNumber}{regLabel}{routeLabel}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <p className="form-hint">Choose the vehicle assigned for this student.</p>
+                    <p className="form-hint">
+                      The student can track all active buses operating on this route.
+                    </p>
                   </div>
 
                   <div className="form-group">
@@ -480,8 +417,8 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
                     </select>
                     <p className="form-hint">
                       {form.assignedRouteId
-                        ? `Filtered to ${availableStops.length} stops for the selected route.`
-                        : 'Please select an Assigned Route to pick a stop.'}
+                        ? `Filtered to ${availableStops.length} stops on the selected route.`
+                        : 'Select an Assigned Route above to view its stops.'}
                     </p>
                   </div>
                 </div>
@@ -513,11 +450,11 @@ function StudentModal({ student, buses, routes, isLoadingData = false, onClose, 
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
-  const [buses, setBuses] = useState<Bus[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [routeFilter, setRouteFilter] = useState('');
   const [modal, setModal] = useState<{ open: boolean; student: Student | null }>({
     open: false,
     student: null,
@@ -531,19 +468,22 @@ export default function StudentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [sRes, bRes, rRes] = await Promise.all([
-        api.get(`/students?search=${encodeURIComponent(search)}&status=${statusFilter}&limit=50`),
-        api.get('/buses'),
+      const queryParams = new URLSearchParams();
+      if (search) queryParams.set('search', search);
+      if (statusFilter) queryParams.set('status', statusFilter);
+      if (routeFilter) queryParams.set('routeId', routeFilter);
+      queryParams.set('limit', '50');
+
+      const [sRes, rRes] = await Promise.all([
+        api.get(`/students?${queryParams.toString()}`),
         api.get('/routes'),
       ]);
 
       const studentList = sRes.data.data || [];
-      const busList = bRes.data.data || [];
       const routeList = rRes.data.data || [];
 
       setStudents(studentList);
       setTotal(sRes.data.pagination?.total ?? sRes.data.meta?.total ?? studentList.length);
-      setBuses(busList);
       setRoutes(routeList);
     } catch (e: any) {
       console.error('Failed to load students data:', e);
@@ -551,7 +491,7 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter]);
+  }, [search, statusFilter, routeFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -571,23 +511,59 @@ export default function StudentsPage() {
     }
   };
 
+  const renderBoardingBadge = (status?: string, busNumber?: string | null, confidence?: number) => {
+    if (status === 'BOARDED_ASSIGNED_ROUTE_BUS') {
+      return (
+        <span className="badge badge-green" style={{ fontSize: 11, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          🟢 Onboard {busNumber || 'Bus'} ({confidence || 100}%)
+        </span>
+      );
+    }
+    if (status === 'BOARDED_OTHER_ROUTE_BUS') {
+      return (
+        <span className="badge badge-red" style={{ fontSize: 11, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <ShieldAlert size={12} /> Other Bus ({busNumber})
+        </span>
+      );
+    }
+    if (status === 'LIKELY_BOARDED') {
+      return (
+        <span className="badge badge-yellow" style={{ fontSize: 11, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          🟡 Likely Onboard ({confidence}%)
+        </span>
+      );
+    }
+    if (status === 'NOT_BOARDED') {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '3px 8px', borderRadius: 4 }}>
+          ⚪ Not Boarded
+        </span>
+      );
+    }
+    return (
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        — Standby
+      </span>
+    );
+  };
+
   const renderStatusBadge = (status?: string, accountStatus?: string) => {
     if (accountStatus === 'EXPIRED' || status === 'INACTIVE') {
       return (
-        <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+        <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', fontSize: 11 }}>
           <XCircle size={11} /> Expired
         </span>
       );
     }
     if (accountStatus === 'EXPIRING_SOON') {
       return (
-        <span className="badge badge-yellow" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)', whiteSpace: 'nowrap' }}>
+        <span className="badge badge-yellow" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', fontSize: 11 }}>
           <AlertTriangle size={11} /> Expiring Soon
         </span>
       );
     }
     return (
-      <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+      <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', fontSize: 11 }}>
         <CheckCircle2 size={11} /> Active
       </span>
     );
@@ -599,7 +575,9 @@ export default function StudentsPage() {
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>
           <h1 className="page-title">Student Management</h1>
-          <p className="page-subtitle">{total} students enrolled across academic durations</p>
+          <p className="page-subtitle">
+            Route + Stop dynamic assignment model with automatic multi-bus boarding detection
+          </p>
         </div>
         <button className="btn btn-primary" onClick={() => setModal({ open: true, student: null })}>
           <Plus size={16} /> Add Student
@@ -609,12 +587,12 @@ export default function StudentsPage() {
       {/* Main Table Card */}
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="card-header" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, maxWidth: 540 }}>
-            <div className="search-bar" style={{ width: '100%', maxWidth: 380 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, maxWidth: 640 }}>
+            <div className="search-bar" style={{ width: '100%', maxWidth: 300 }}>
               <Search size={15} />
               <input
                 className="form-input"
-                placeholder="Search by name, ID, bus, route or stop…"
+                placeholder="Search by student name, ID, route, stop…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{ paddingLeft: 36, width: '100%' }}
@@ -622,9 +600,22 @@ export default function StudentsPage() {
             </div>
             <select
               className="form-select"
+              value={routeFilter}
+              onChange={(e) => setRouteFilter(e.target.value)}
+              style={{ width: 180, height: 38 }}
+            >
+              <option value="">All Routes</option>
+              {routes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ width: 140, height: 38 }}
+              style={{ width: 130, height: 38 }}
             >
               <option value="">All Statuses</option>
               <option value="ACTIVE">Active Only</option>
@@ -636,15 +627,15 @@ export default function StudentsPage() {
           </span>
         </div>
 
-        {/* Compact, 100% Screen-Fitted Table (No Horizontal Sliding Needed) */}
+        {/* Responsive Table */}
         <div className="table-wrap" style={{ overflowX: 'auto', width: '100%' }}>
-          <table style={{ width: '100%', tableLayout: 'fixed', minWidth: '760px', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed', minWidth: '780px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-secondary)' }}>
-                <th style={{ width: '28%', padding: '12px 16px' }}>Student & Identification</th>
-                <th style={{ width: '22%', padding: '12px 14px' }}>Course & Expiration</th>
-                <th style={{ width: '25%', padding: '12px 14px' }}>Transit & Route Assignment</th>
-                <th style={{ width: '13%', padding: '12px 14px' }}>Bus & Status</th>
+                <th style={{ width: '27%', padding: '12px 16px' }}>Student & Identification</th>
+                <th style={{ width: '20%', padding: '12px 14px' }}>Course & Expiration</th>
+                <th style={{ width: '24%', padding: '12px 14px' }}>Route & Stop Assignment</th>
+                <th style={{ width: '17%', padding: '12px 14px' }}>Live Boarding State</th>
                 <th style={{
                   width: '12%',
                   padding: '12px 16px',
@@ -675,7 +666,7 @@ export default function StudentsPage() {
                     <div className="empty-state">
                       <UserCheck size={36} style={{ opacity: 0.4, margin: '0 auto 8px' }} />
                       <p>No students found</p>
-                      <span>Click "Add Student" to register a student.</span>
+                      <span>Click "Add Student" to register a student with Route & Stop.</span>
                     </div>
                   </td>
                 </tr>
@@ -691,7 +682,7 @@ export default function StudentsPage() {
                         <code style={{ fontSize: 11, background: 'var(--bg-hover)', border: '1px solid var(--border)', padding: '1px 6px', borderRadius: 4, color: 'var(--accent)' }}>
                           {s.studentCode}
                         </code>
-                        <span style={{ fontSize: 11.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+                        <span style={{ fontSize: 11.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
                           {s.user?.email}
                         </span>
                       </div>
@@ -729,21 +720,15 @@ export default function StudentsPage() {
                       )}
                     </td>
 
-                    {/* Col 4: Bus & Account Status */}
+                    {/* Col 4: Boarding State & Status */}
                     <td style={{ padding: '12px 14px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                        {s.assignedBus ? (
-                          <span className="badge badge-blue" style={{ fontSize: 10, padding: '2px 8px' }}>
-                            🚌 {s.assignedBus.busNumber}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>No Bus</span>
-                        )}
+                        {renderBoardingBadge(s.boardingStatus, s.detectedBusNumber, s.boardingConfidence)}
                         {renderStatusBadge(s.user?.status, s.accountStatus)}
                       </div>
                     </td>
 
-                    {/* Col 5: Actions Buttons (Sticky on screen edge) */}
+                    {/* Col 5: Actions Buttons */}
                     <td style={{
                       padding: '12px 16px',
                       textAlign: 'right',
@@ -791,7 +776,6 @@ export default function StudentsPage() {
       {modal.open && (
         <StudentModal
           student={modal.student}
-          buses={buses}
           routes={routes}
           onClose={() => setModal({ open: false, student: null })}
           onSave={() => {

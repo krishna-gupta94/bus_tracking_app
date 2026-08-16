@@ -23,7 +23,6 @@ const studentCreateSchema = z.object({
   studentCode: z.string().min(2, 'Student ID/Code required'),
   courseStartYear: z.coerce.number().int().min(2000, 'Invalid 4-digit start year').max(2100, 'Invalid 4-digit start year'),
   courseEndYear: z.coerce.number().int().min(2000, 'Invalid 4-digit end year').max(2100, 'Invalid 4-digit end year'),
-  assignedBusId: z.string().nullable().optional(),
   assignedRouteId: z.string().nullable().optional(),
   assignedStopId: z.string().nullable().optional(),
 }).refine((data) => data.courseEndYear >= data.courseStartYear, {
@@ -38,13 +37,12 @@ const studentUpdateSchema = z.object({
   courseStartYear: z.coerce.number().int().min(2000, 'Invalid 4-digit start year').max(2100, 'Invalid 4-digit start year').optional(),
   courseEndYear: z.coerce.number().int().min(2000, 'Invalid 4-digit end year').max(2100, 'Invalid 4-digit end year').optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-  assignedBusId: z.string().nullable().optional(),
   assignedRouteId: z.string().nullable().optional(),
   assignedStopId: z.string().nullable().optional(),
 });
 
 export const getStudents = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { search, status, routeId, busId, page = '1', limit = '50' } = req.query as Record<string, string>;
+  const { search, status, routeId, stopId, page = '1', limit = '50' } = req.query as Record<string, string>;
   const skip = (parseInt(page) - 1) * parseInt(limit);
   const q = search ? search.trim() : '';
 
@@ -58,9 +56,6 @@ export const getStudents = async (req: AuthRequest, res: Response): Promise<void
         { user: { name: { contains: q } } },
         { user: { email: { contains: q } } },
         { user: { phone: { contains: q } } },
-        // Assigned Bus fields
-        { assignedBus: { busNumber: { contains: q } } },
-        { assignedBus: { registrationNumber: { contains: q } } },
         // Assigned Route fields
         { assignedRoute: { name: { contains: q } } },
         { assignedRoute: { description: { contains: q } } },
@@ -94,8 +89,8 @@ export const getStudents = async (req: AuthRequest, res: Response): Promise<void
     andConditions.push({ assignedRouteId: routeId });
   }
 
-  if (busId) {
-    andConditions.push({ assignedBusId: busId });
+  if (stopId) {
+    andConditions.push({ assignedStopId: stopId });
   }
 
   const where = andConditions.length > 0 ? { AND: andConditions } : {};
@@ -107,21 +102,32 @@ export const getStudents = async (req: AuthRequest, res: Response): Promise<void
       take: parseInt(limit),
       include: {
         user: { select: { id: true, name: true, email: true, phone: true, status: true, createdAt: true } },
-        assignedBus: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
-        assignedRoute: { select: { id: true, name: true, stops: { orderBy: { sequence: 'asc' } } } },
+        assignedRoute: {
+          select: {
+            id: true,
+            name: true,
+            stops: { orderBy: { sequence: 'asc' } },
+            buses: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
+          },
+        },
         assignedStop: { select: { id: true, name: true, sequence: true, address: true, latitude: true, longitude: true } },
+        boardingEvents: { orderBy: { createdAt: 'desc' }, take: 1, include: { bus: true } },
       },
       orderBy: { createdAt: 'desc' },
     }),
     prisma.student.count({ where }),
   ]);
 
-  // Compute dynamic account status (ACTIVE, EXPIRING_SOON, EXPIRED)
+  // Compute dynamic account status and attach latest boarding status
   const students = rawStudents.map((s) => {
     const dynamicStatus = computeAccountStatus(s.accountExpirationDate);
+    const latestBoarding = s.boardingEvents[0];
     return {
       ...s,
       accountStatus: dynamicStatus,
+      boardingStatus: latestBoarding?.status || 'UNKNOWN',
+      boardingConfidence: latestBoarding?.confidence || 0,
+      detectedBusNumber: latestBoarding?.detectedBusNumber || latestBoarding?.bus?.busNumber || null,
     };
   });
 
@@ -139,19 +145,31 @@ export const getStudent = async (req: AuthRequest, res: Response): Promise<void>
     where: { id },
     include: {
       user: { select: { id: true, name: true, email: true, phone: true, status: true } },
-      assignedBus: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
-      assignedRoute: { select: { id: true, name: true, stops: { orderBy: { sequence: 'asc' } } } },
-      assignedStop: { select: { id: true, name: true, latitude: true, longitude: true, sequence: true } },
+      assignedRoute: {
+        select: {
+          id: true,
+          name: true,
+          stops: { orderBy: { sequence: 'asc' } },
+          buses: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
+        },
+      },
+      assignedStop: { select: { id: true, name: true, latitude: true, longitude: true, sequence: true, address: true } },
+      boardingEvents: { orderBy: { createdAt: 'desc' }, take: 1, include: { bus: true } },
     },
   });
   if (!student) throw createError('Student not found', 404);
 
   const dynamicStatus = computeAccountStatus(student.accountExpirationDate);
+  const latestBoarding = student.boardingEvents[0];
+
   res.json({
     success: true,
     data: {
       ...student,
       accountStatus: dynamicStatus,
+      boardingStatus: latestBoarding?.status || 'UNKNOWN',
+      boardingConfidence: latestBoarding?.confidence || 0,
+      detectedBusNumber: latestBoarding?.detectedBusNumber || latestBoarding?.bus?.busNumber || null,
     },
   });
 };
@@ -169,7 +187,6 @@ export const createStudent = async (req: AuthRequest, res: Response): Promise<vo
     studentCode,
     courseStartYear,
     courseEndYear,
-    assignedBusId,
     assignedRouteId,
     assignedStopId,
   } = parse.data;
@@ -182,7 +199,6 @@ export const createStudent = async (req: AuthRequest, res: Response): Promise<vo
   const cleanEmail = normalizeString(email).toLowerCase();
   const cleanCode = normalizeString(studentCode);
   const cleanPhone = normalizeString(phone) || null;
-  const cleanBusId = normalizeString(assignedBusId) || null;
   const cleanRouteId = normalizeString(assignedRouteId) || null;
   const cleanStopId = normalizeString(assignedStopId) || null;
 
@@ -200,12 +216,6 @@ export const createStudent = async (req: AuthRequest, res: Response): Promise<vo
   // 4. Calculate automatic expiration date (July 1, courseEndYear 00:00:00 IST)
   const expirationDate = calculateCourseExpirationDate(courseEndYear);
   const accountStatus = computeAccountStatus(expirationDate);
-
-  // Verify bus reference if provided
-  if (cleanBusId) {
-    const bus = await prisma.bus.findUnique({ where: { id: cleanBusId } });
-    if (!bus) throw createError('Selected bus does not exist', 400);
-  }
 
   // Verify route reference if provided
   if (cleanRouteId) {
@@ -238,13 +248,11 @@ export const createStudent = async (req: AuthRequest, res: Response): Promise<vo
       courseEndYear,
       accountExpirationDate: expirationDate,
       accountStatus,
-      assignedBusId: cleanBusId,
       assignedRouteId: cleanRouteId,
       assignedStopId: cleanStopId,
     },
     include: {
       user: { select: { id: true, name: true, email: true, phone: true, status: true } },
-      assignedBus: { select: { id: true, busNumber: true, status: true } },
       assignedRoute: { select: { id: true, name: true } },
       assignedStop: { select: { id: true, name: true } },
     },
@@ -274,7 +282,6 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
     courseStartYear,
     courseEndYear,
     status,
-    assignedBusId,
     assignedRouteId,
     assignedStopId,
   } = parse.data;
@@ -290,7 +297,6 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
   const cleanName = name !== undefined ? normalizeString(name) : undefined;
   const cleanPhone = phone !== undefined ? (normalizeString(phone) || null) : undefined;
   const cleanCode = studentCode !== undefined ? normalizeString(studentCode) : undefined;
-  const cleanBusId = assignedBusId !== undefined ? (normalizeString(assignedBusId) || null) : undefined;
   const cleanRouteId = assignedRouteId !== undefined ? (normalizeString(assignedRouteId) || null) : undefined;
   const cleanStopId = assignedStopId !== undefined ? (normalizeString(assignedStopId) || null) : undefined;
 
@@ -311,12 +317,6 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
   if (finalEndYear) {
     updatedExpirationDate = calculateCourseExpirationDate(finalEndYear);
     updatedAccountStatus = computeAccountStatus(updatedExpirationDate);
-  }
-
-  // Verify bus reference if updating
-  if (cleanBusId) {
-    const bus = await prisma.bus.findUnique({ where: { id: cleanBusId } });
-    if (!bus) throw createError('Selected bus does not exist', 400);
   }
 
   // Verify route reference if updating
@@ -359,13 +359,11 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
         accountExpirationDate: updatedExpirationDate,
         accountStatus: updatedAccountStatus,
       }),
-      ...(cleanBusId !== undefined && { assignedBusId: cleanBusId }),
       ...(cleanRouteId !== undefined && { assignedRouteId: cleanRouteId }),
       ...(cleanStopId !== undefined && { assignedStopId: cleanStopId }),
     },
     include: {
       user: { select: { id: true, name: true, email: true, phone: true, status: true } },
-      assignedBus: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
       assignedRoute: { select: { id: true, name: true, stops: { orderBy: { sequence: 'asc' } } } },
       assignedStop: { select: { id: true, name: true, sequence: true } },
     },
@@ -385,3 +383,4 @@ export const deleteStudent = async (req: AuthRequest, res: Response): Promise<vo
   await prisma.user.delete({ where: { id: student.userId } });
   res.json({ success: true, message: 'Student deleted' });
 };
+

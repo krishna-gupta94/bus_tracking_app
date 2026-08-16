@@ -1,16 +1,12 @@
-import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { prisma } from '../src/prisma/client';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';
-
-const dbUrl = process.env.DATABASE_URL || 'file:./prisma/dev.db';
-const adapter = new PrismaBetterSqlite3({ url: dbUrl });
-const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('🌱 Starting seed...');
 
   // Clean existing data
+  await prisma.boardingEvent.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.busLocation.deleteMany();
   await prisma.trip.deleteMany();
@@ -48,7 +44,7 @@ async function main() {
     },
   });
   const driver1 = await prisma.driver.create({
-    data: { userId: driverUser1.id, licenseNumber: 'UP32-DL-2021-001' },
+    data: { userId: driverUser1.id, driverCode: 'DRV001' },
   });
 
   const driverUser2 = await prisma.user.create({
@@ -62,48 +58,62 @@ async function main() {
     },
   });
   const driver2 = await prisma.driver.create({
-    data: { userId: driverUser2.id, licenseNumber: 'UP32-DL-2021-002' },
+    data: { userId: driverUser2.id, driverCode: 'DRV002' },
+  });
+
+  const driverUser3 = await prisma.user.create({
+    data: {
+      name: 'Rajesh Verma',
+      email: 'driver3@college.edu',
+      passwordHash: await bcrypt.hash('Driver@123', ROUNDS),
+      role: 'DRIVER',
+      status: 'ACTIVE',
+      phone: '+91-9000000004',
+    },
+  });
+  const driver3 = await prisma.driver.create({
+    data: { userId: driverUser3.id, driverCode: 'DRV003' },
   });
   console.log('✅ Drivers created');
 
   // ── Routes ─────────────────────────────────────────────────────────────
   const route1 = await prisma.route.create({
     data: {
-      name: 'Bareilly City → College',
-      description: 'Main city route via railway crossing',
+      name: 'Bareilly City → Invertis Campus (Route A)',
+      description: 'Main city route via Railway Station, Civil Lines, and Subhash Nagar',
       status: 'ACTIVE',
     },
   });
   const route2 = await prisma.route.create({
     data: {
-      name: 'Pilibhit Road → College',
-      description: 'Pilibhit bypass route',
+      name: 'Pilibhit Road → Invertis Campus (Route B)',
+      description: 'Pilibhit bypass route via Pilibhit Chowk, Nawabganj, and Izatnagar',
       status: 'ACTIVE',
     },
   });
 
   // ── Stops ──────────────────────────────────────────────────────────────
   const stops1 = await Promise.all([
-    prisma.stop.create({ data: { name: 'City Center Bus Stand', latitude: 28.3670, longitude: 79.4304, sequence: 1, routeId: route1.id } }),
-    prisma.stop.create({ data: { name: 'Railway Station', latitude: 28.3594, longitude: 79.4137, sequence: 2, routeId: route1.id } }),
-    prisma.stop.create({ data: { name: 'Civil Lines', latitude: 28.3830, longitude: 79.4250, sequence: 3, routeId: route1.id } }),
-    prisma.stop.create({ data: { name: 'Subhash Nagar', latitude: 28.3950, longitude: 79.4150, sequence: 4, routeId: route1.id } }),
-    prisma.stop.create({ data: { name: 'Invertis University, Bareilly', address: 'Invertis University, Delhi-Lucknow Highway (NH-24), Bareilly, Uttar Pradesh, 243123, India', stopCode: 'IU-MAIN', latitude: 28.2924, longitude: 79.4940, sequence: 5, routeId: route1.id } }),
+    prisma.stop.create({ data: { name: 'City Center Bus Stand', latitude: 28.3670, longitude: 79.4304, sequence: 1, routeId: route1.id, stopCode: 'STP-01' } }),
+    prisma.stop.create({ data: { name: 'Railway Station', latitude: 28.3594, longitude: 79.4137, sequence: 2, routeId: route1.id, stopCode: 'STP-02' } }),
+    prisma.stop.create({ data: { name: 'Civil Lines', latitude: 28.3830, longitude: 79.4250, sequence: 3, routeId: route1.id, stopCode: 'STP-03' } }),
+    prisma.stop.create({ data: { name: 'Subhash Nagar', latitude: 28.3950, longitude: 79.4150, sequence: 4, routeId: route1.id, stopCode: 'STP-04' } }),
+    prisma.stop.create({ data: { name: 'Invertis University Main Gate', address: 'Invertis University, NH-24 Bareilly', stopCode: 'IU-MAIN', latitude: 28.2924, longitude: 79.4940, sequence: 5, routeId: route1.id } }),
   ]);
 
   const stops2 = await Promise.all([
-    prisma.stop.create({ data: { name: 'Pilibhit Chowk', latitude: 28.3520, longitude: 79.4530, sequence: 1, routeId: route2.id } }),
-    prisma.stop.create({ data: { name: 'Nawabganj', latitude: 28.3700, longitude: 79.4400, sequence: 2, routeId: route2.id } }),
-    prisma.stop.create({ data: { name: 'Izatnagar', latitude: 28.3900, longitude: 79.4250, sequence: 3, routeId: route2.id } }),
-    prisma.stop.create({ data: { name: 'Invertis University, Bareilly', address: 'Invertis University, Delhi-Lucknow Highway (NH-24), Bareilly, Uttar Pradesh, 243123, India', stopCode: 'IU-MAIN', latitude: 28.2924, longitude: 79.4940, sequence: 4, routeId: route2.id } }),
+    prisma.stop.create({ data: { name: 'Pilibhit Chowk', latitude: 28.3520, longitude: 79.4530, sequence: 1, routeId: route2.id, stopCode: 'STP-B1' } }),
+    prisma.stop.create({ data: { name: 'Nawabganj', latitude: 28.3700, longitude: 79.4400, sequence: 2, routeId: route2.id, stopCode: 'STP-B2' } }),
+    prisma.stop.create({ data: { name: 'Izatnagar', latitude: 28.3900, longitude: 79.4250, sequence: 3, routeId: route2.id, stopCode: 'STP-B3' } }),
+    prisma.stop.create({ data: { name: 'Invertis University Main Gate', address: 'Invertis University, NH-24 Bareilly', stopCode: 'IU-MAIN-2', latitude: 28.2924, longitude: 79.4940, sequence: 4, routeId: route2.id } }),
   ]);
   console.log('✅ Routes and stops created');
 
-  // ── Buses ──────────────────────────────────────────────────────────────
+  // ── Buses (Multiple buses on Route A) ───────────────────────────────────
   const bus1 = await prisma.bus.create({
     data: {
-      busNumber: 'B001',
-      registrationNumber: 'UP32-AB-1234',
+      busNumber: 'Bus 01',
+      registrationNumber: 'UP25-AB-1001',
       capacity: 40,
       status: 'AVAILABLE',
       driverId: driver1.id,
@@ -112,23 +122,42 @@ async function main() {
   });
   const bus2 = await prisma.bus.create({
     data: {
-      busNumber: 'B002',
-      registrationNumber: 'UP32-CD-5678',
-      capacity: 35,
+      busNumber: 'Bus 02',
+      registrationNumber: 'UP25-CD-2002',
+      capacity: 40,
       status: 'AVAILABLE',
       driverId: driver2.id,
-      routeId: route2.id,
+      routeId: route1.id, // Route 1 has multiple buses!
     },
   });
-  console.log('✅ Buses created');
+  const bus3 = await prisma.bus.create({
+    data: {
+      busNumber: 'Bus 03',
+      registrationNumber: 'UP25-EF-3003',
+      capacity: 40,
+      status: 'AVAILABLE',
+      driverId: driver3.id,
+      routeId: route1.id, // Route 1 has a 3rd bus
+    },
+  });
+  const bus4 = await prisma.bus.create({
+    data: {
+      busNumber: 'Bus 04',
+      registrationNumber: 'UP25-GH-4004',
+      capacity: 35,
+      status: 'AVAILABLE',
+      routeId: route2.id, // Route 2
+    },
+  });
+  console.log('✅ Buses created (Multiple buses assigned per route)');
 
-  // ── Students ───────────────────────────────────────────────────────────
+  // ── Students (Route + Stop assignment, NO permanent bus) ───────────────
   const studentData = [
-    { name: 'Amit Sharma', email: 'student1@college.edu', code: 'STU001', busId: bus1.id, routeId: route1.id, stopId: stops1[1].id },
-    { name: 'Priya Verma', email: 'student2@college.edu', code: 'STU002', busId: bus1.id, routeId: route1.id, stopId: stops1[2].id },
-    { name: 'Rahul Gupta', email: 'student3@college.edu', code: 'STU003', busId: bus1.id, routeId: route1.id, stopId: stops1[3].id },
-    { name: 'Neha Singh', email: 'student4@college.edu', code: 'STU004', busId: bus2.id, routeId: route2.id, stopId: stops2[0].id },
-    { name: 'Vivek Tiwari', email: 'student5@college.edu', code: 'STU005', busId: bus2.id, routeId: route2.id, stopId: stops2[1].id },
+    { name: 'Rahul Sharma', email: 'student1@college.edu', code: 'STU202401', routeId: route1.id, stopId: stops1[1].id, start: 2024, end: 2028 },
+    { name: 'Priya Verma', email: 'student2@college.edu', code: 'STU202402', routeId: route1.id, stopId: stops1[2].id, start: 2024, end: 2028 },
+    { name: 'Aman Gupta', email: 'student3@college.edu', code: 'STU202501', routeId: route1.id, stopId: stops1[1].id, start: 2025, end: 2029 },
+    { name: 'Neha Singh', email: 'student4@college.edu', code: 'STU202403', routeId: route2.id, stopId: stops2[0].id, start: 2024, end: 2028 },
+    { name: 'Vivek Tiwari', email: 'student5@college.edu', code: 'STU202502', routeId: route2.id, stopId: stops2[1].id, start: 2025, end: 2029 },
   ];
 
   for (const s of studentData) {
@@ -142,17 +171,34 @@ async function main() {
         phone: '+91-90000000' + String(studentData.indexOf(s) + 10).padStart(2, '0'),
       },
     });
-    await prisma.student.create({
+
+    const expDate = new Date(`${s.end}-07-01T00:00:00.000+05:30`);
+    const student = await prisma.student.create({
       data: {
         userId: user.id,
         studentCode: s.code,
-        assignedBusId: s.busId,
+        courseStartYear: s.start,
+        courseEndYear: s.end,
+        accountExpirationDate: expDate,
+        accountStatus: 'ACTIVE',
         assignedRouteId: s.routeId,
         assignedStopId: s.stopId,
       },
     });
+
+    // Seed sample initial boarding event record
+    await prisma.boardingEvent.create({
+      data: {
+        studentId: student.id,
+        routeId: s.routeId,
+        stopId: s.stopId,
+        status: 'UNKNOWN',
+        confidence: 0,
+        notes: 'Awaiting route transit broadcast',
+      },
+    });
   }
-  console.log('✅ Students created');
+  console.log('✅ Students created with Route + Stop assignment & Boarding records');
 
   // ── Sample Notifications ───────────────────────────────────────────────
   const allStudentUsers = await prisma.user.findMany({ where: { role: 'STUDENT' } });

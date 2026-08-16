@@ -7,6 +7,8 @@ import { prisma } from './prisma/client';
 import { setSocketServer as setTripSocket } from './controllers/tripController';
 import { setSocketServer as setLocationSocket } from './controllers/locationController';
 import { setSocketServer as setNotificationSocket } from './controllers/notificationController';
+import { busLocationProvider } from './services/busLocationProvider';
+import { boardingDetectionService } from './services/boardingDetectionService';
 
 const server = http.createServer(app);
 
@@ -19,13 +21,21 @@ const io = new SocketServer(server, {
   transports: ['websocket', 'polling'],
 });
 
-// Share Socket.IO instance with controllers
+// Share Socket.IO instance with controllers & services
 setTripSocket(io);
 setLocationSocket(io);
 setNotificationSocket(io);
+busLocationProvider.setSocketServer(io);
+boardingDetectionService.setSocketServer(io);
 
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`);
+
+  // Student/Admin joins a route room to receive all bus updates on that route
+  socket.on('join:route', ({ routeId }: { routeId: string }) => {
+    socket.join(`route:${routeId}`);
+    console.log(`[Socket] ${socket.id} joined route:${routeId}`);
+  });
 
   // Student/Admin joins a bus room to receive live updates
   socket.on('join:bus', ({ busId }: { busId: string }) => {
@@ -68,62 +78,34 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Driver sends location update directly via socket (alternative to HTTP POST)
+  // Driver / Tracker sends location update directly via socket
   socket.on('location:send', async (data: {
     latitude: number;
     longitude: number;
-    tripId: string;
+    tripId?: string;
     busId: string;
     speed?: number;
     heading?: number;
     accuracy?: number;
+    source?: 'DRIVER_PHONE' | 'PHYSICAL_TRACKER';
   }) => {
     try {
-      const { latitude, longitude, tripId, busId, speed, heading, accuracy } = data;
+      const { latitude, longitude, tripId, busId, speed, heading, accuracy, source } = data;
       if (
         typeof latitude !== 'number' || typeof longitude !== 'number' ||
-        !tripId || !busId
+        !busId
       ) return;
 
-      if (tripId !== 'EMERGENCY') {
-        await prisma.busLocation.create({
-          data: {
-            latitude,
-            longitude,
-            tripId,
-            busId,
-            speed: speed ?? null,
-            heading: heading ?? null,
-            accuracy: accuracy ?? null,
-          },
-        });
-      }
-
-      const locationData = {
+      await busLocationProvider.recordLocation({
         busId,
+        tripId,
         latitude,
         longitude,
-        speed,
-        heading,
-        accuracy,
-        timestamp: new Date().toISOString(),
-        tripId,
-      };
-
-      io.to(`bus:${busId}`).emit('location:update', locationData);
-      io.to('admin').emit('location:update', locationData);
-
-      // Trigger background ETA computation and broadcast
-      const { etaService } = await import('./services/etaService');
-      etaService
-        .calculateETA(busId)
-        .then((etaData) => {
-          io.to(`bus:${busId}`).emit('eta:update', etaData);
-          io.to('admin').emit('eta:update', etaData);
-        })
-        .catch((err) => {
-          console.error('[Socket] ETA calculation error:', err);
-        });
+        speed: speed ?? null,
+        heading: heading ?? null,
+        accuracy: accuracy ?? null,
+        source: source || 'DRIVER_PHONE',
+      });
     } catch (err) {
       console.error('[Socket] location:send error:', err);
     }

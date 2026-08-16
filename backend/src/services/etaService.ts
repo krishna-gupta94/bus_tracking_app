@@ -27,6 +27,13 @@ export interface ETAPredictionResult {
   status: 'ON_TIME' | 'SLIGHTLY_DELAYED' | 'DELAYED' | 'BUS_STOPPED' | 'GPS_UNAVAILABLE' | 'OFFLINE';
   lastUpdatedSecondsAgo: number;
   stopsRemaining: number;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+    speed?: number | null;
+    heading?: number | null;
+    timestamp?: string;
+  } | null;
   breakdown: {
     xgboostPredictedSeconds: number;
     historicalSeconds: number;
@@ -295,6 +302,15 @@ class ETAService {
       status,
       lastUpdatedSecondsAgo: gpsState.lastUpdatedSecondsAgo,
       stopsRemaining: roadResult.stopsRemaining,
+      currentLocation: recentLocations[0]
+        ? {
+            latitude: recentLocations[0].latitude,
+            longitude: recentLocations[0].longitude,
+            speed: recentLocations[0].speed,
+            heading: recentLocations[0].heading,
+            timestamp: recentLocations[0].timestamp.toISOString(),
+          }
+        : null,
       breakdown: {
         xgboostPredictedSeconds: xgboostSec,
         historicalSeconds: histResult.totalHistoricalSeconds,
@@ -303,6 +319,94 @@ class ETAService {
       updatedAt: new Date().toISOString(),
     };
   }
+
+  /**
+   * Calculates intelligent real-time ETA for ALL active buses operating on a route,
+   * sorted by ETA ascending (earliest arrival first).
+   */
+  public async getRouteBusesETA(routeId: string, targetStopId?: string): Promise<{
+    routeId: string;
+    routeName: string;
+    targetStopId: string;
+    targetStopName: string;
+    activeBuses: ETAPredictionResult[];
+    offlineBuses: Array<{ busId: string; busNumber: string; registrationNumber: string; status: string }>;
+    sortedBuses: ETAPredictionResult[];
+    totalActive: number;
+    updatedAt: string;
+  }> {
+    const route = await prisma.route.findUnique({
+      where: { id: routeId },
+      include: {
+        stops: { orderBy: { sequence: 'asc' } },
+        buses: {
+          include: {
+            driver: { include: { user: { select: { name: true } } } },
+            trips: { where: { status: 'ACTIVE' }, take: 1 },
+          },
+        },
+      },
+    });
+
+    if (!route) {
+      throw new Error(`Route ${routeId} not found`);
+    }
+
+    const stops = route.stops;
+    let targetStop = stops.length > 0 ? stops[stops.length - 1] : null;
+    if (targetStopId) {
+      const match = stops.find((s) => s.id === targetStopId);
+      if (match) targetStop = match;
+    }
+
+    const targetStopName = targetStop?.name || 'Assigned Stop';
+    const finalTargetStopId = targetStop?.id || targetStopId || 'UNKNOWN';
+
+    const activeBuses: ETAPredictionResult[] = [];
+    const offlineBuses: Array<{ busId: string; busNumber: string; registrationNumber: string; status: string }> = [];
+
+    await Promise.all(
+      route.buses.map(async (bus) => {
+        const hasActiveTrip = bus.trips.length > 0;
+        if (hasActiveTrip) {
+          try {
+            const eta = await this.calculateETA(bus.id, finalTargetStopId);
+            activeBuses.push(eta);
+          } catch (e) {
+            console.error(`[ETAService] Error calculating ETA for bus ${bus.busNumber}:`, e);
+          }
+        } else {
+          offlineBuses.push({
+            busId: bus.id,
+            busNumber: bus.busNumber,
+            registrationNumber: bus.registrationNumber,
+            status: bus.status,
+          });
+        }
+      })
+    );
+
+    // Sort active buses by ETA seconds ascending (earliest first)
+    activeBuses.sort((a, b) => {
+      // Prioritize active with valid positive ETAs
+      if (a.etaSeconds <= 0 && b.etaSeconds > 0) return 1;
+      if (b.etaSeconds <= 0 && a.etaSeconds > 0) return -1;
+      return a.etaSeconds - b.etaSeconds;
+    });
+
+    return {
+      routeId: route.id,
+      routeName: route.name,
+      targetStopId: finalTargetStopId,
+      targetStopName,
+      activeBuses,
+      offlineBuses,
+      sortedBuses: activeBuses,
+      totalActive: activeBuses.length,
+      updatedAt: new Date().toISOString(),
+    };
+  }
 }
 
 export const etaService = new ETAService();
+

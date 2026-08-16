@@ -174,7 +174,7 @@ export default function BusesPage() {
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Bus</th><th>Registration</th><th>Capacity</th><th>Driver</th><th>Route</th><th>Students</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Bus</th><th>Registration</th><th>Capacity</th><th>Driver</th><th>Route</th><th>Active Trip</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {loading ? (
                 [...Array(4)].map((_, i) => <tr key={i}>{[...Array(8)].map((_, j) => <td key={j}><div className="skeleton" style={{height:18}} /></td>)}</tr>)
@@ -182,12 +182,18 @@ export default function BusesPage() {
                 <tr><td colSpan={8}><div className="empty-state"><Bus /><p>{search || statusFilter ? 'No buses match your search criteria' : 'No buses found'}</p></div></td></tr>
               ) : buses.map(b => (
                 <tr key={b.id}>
-                  <td><strong style={{fontSize:16}}>{b.busNumber}</strong></td>
+                  <td><strong style={{fontSize:16}}>🚌 {b.busNumber}</strong></td>
                   <td><code style={{fontSize:12,background:'var(--bg-hover)',padding:'2px 8px',borderRadius:4}}>{b.registrationNumber}</code></td>
-                  <td>{b.capacity}</td>
+                  <td>{b.capacity} seats</td>
                   <td style={{fontSize:13}}>{b.driver?.user?.name || <span style={{color:'var(--text-muted)'}}>Unassigned</span>}</td>
-                  <td style={{fontSize:12,color:'var(--text-secondary)',maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.route?.name || '—'}</td>
-                  <td style={{fontSize:13}}>{b._count?.students ?? 0}</td>
+                  <td style={{fontSize:12,color:'var(--accent)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={b.route?.name || ''}>{b.route?.name || '—'}</td>
+                  <td style={{fontSize:12}}>
+                    {b.trips && b.trips.length > 0 ? (
+                      <span className="badge badge-green" style={{ fontSize: 10 }}>In Transit</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)' }}>Idle</span>
+                    )}
+                  </td>
                   <td><span className={`badge ${statusColors[b.status] || 'badge-gray'}`}><span className="badge-dot" />{b.status}</span></td>
                   <td>
                     <div style={{display:'flex',gap:6}}>

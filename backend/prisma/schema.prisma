@@ -1,13 +1,11 @@
 // This is your Prisma schema file
-// Prisma 7: datasource URL is in prisma.config.ts, not here
 
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -39,12 +37,12 @@ model Student {
   accountStatus         String    @default("ACTIVE")
 
   user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedBus     Bus?   @relation("StudentBus", fields: [assignedBusId], references: [id])
-  assignedBusId   String?
   assignedRoute   Route? @relation("StudentRoute", fields: [assignedRouteId], references: [id])
   assignedRouteId String?
   assignedStop    Stop?  @relation("StudentStop", fields: [assignedStopId], references: [id])
   assignedStopId  String?
+
+  boardingEvents BoardingEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,9 +78,9 @@ model Bus {
   route   Route?  @relation(fields: [routeId], references: [id])
   routeId String?
 
-  students  Student[]     @relation("StudentBus")
-  trips     Trip[]
-  locations BusLocation[]
+  trips          Trip[]
+  locations      BusLocation[]
+  boardingEvents BoardingEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -101,6 +99,7 @@ model Route {
   trips             Trip[]
   students          Student[]                 @relation("StudentRoute")
   historicalMetrics HistoricalSegmentMetric[]
+  boardingEvents    BoardingEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,7 +144,8 @@ model Trip {
   route   Route  @relation(fields: [routeId], references: [id])
   routeId String
 
-  locations BusLocation[]
+  locations      BusLocation[]
+  boardingEvents BoardingEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -204,3 +204,30 @@ model Notification {
 
   @@map("notifications")
 }
+
+model BoardingEvent {
+  id                 String    @id @default(cuid())
+  studentId          String
+  busId              String?
+  tripId             String?
+  routeId            String
+  stopId             String?
+  status             String    @default("UNKNOWN") // BOARDED_ASSIGNED_ROUTE_BUS | BOARDED_OTHER_ROUTE_BUS | LIKELY_BOARDED | NOT_BOARDED | UNKNOWN
+  confidence         Int       @default(0)         // 0 - 100
+  detectedBusNumber  String?
+  notes              String?
+  verifiedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bus     Bus?    @relation(fields: [busId], references: [id], onDelete: SetNull)
+  trip    Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([routeId, createdAt])
+  @@index([busId, createdAt])
+  @@map("boarding_events")
+}
+

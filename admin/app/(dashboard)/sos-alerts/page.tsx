@@ -381,6 +381,27 @@ export default function SOSAlertsPage() {
                 </div>
               )}
 
+              {/* Detected Onboard Passenger Estimate */}
+              <div style={{
+                background: 'rgba(59, 130, 246, 0.06)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                borderRadius: 8,
+                padding: '12px 14px',
+                marginBottom: 16,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>
+                    👥 Potentially Onboard Students
+                  </span>
+                  <span className="badge badge-blue" style={{ fontSize: 10 }}>
+                    AI Detection Estimate
+                  </span>
+                </div>
+                <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: 0 }}>
+                  Real-time trajectory telemetry correlates active passengers traveling on this vehicle without relying on static assignments.
+                </p>
+              </div>
+
               <div
                 style={{
                   background: 'rgba(56, 189, 248, 0.08)',

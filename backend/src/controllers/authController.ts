@@ -74,8 +74,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     include: {
       student: {
         include: {
-          assignedBus: { select: { id: true, busNumber: true, status: true } },
-          assignedRoute: { select: { id: true, name: true, stops: { orderBy: { sequence: 'asc' } } } },
+          assignedRoute: {
+            include: {
+              stops: { orderBy: { sequence: 'asc' } },
+              buses: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
+            },
+          },
           assignedStop: { select: { id: true, name: true, latitude: true, longitude: true, sequence: true } },
         },
       },
@@ -139,9 +143,13 @@ export const getMe = async (req: any, res: Response): Promise<void> => {
     include: {
       student: {
         include: {
-          assignedBus: { select: { id: true, busNumber: true, status: true } },
-          assignedRoute: { select: { id: true, name: true, stops: { orderBy: { sequence: 'asc' } } } },
-          assignedStop: { select: { id: true, name: true, latitude: true, longitude: true } },
+          assignedRoute: {
+            include: {
+              stops: { orderBy: { sequence: 'asc' } },
+              buses: { select: { id: true, busNumber: true, registrationNumber: true, status: true } },
+            },
+          },
+          assignedStop: { select: { id: true, name: true, latitude: true, longitude: true, sequence: true } },
         },
       },
       driver: {
