@@ -64,7 +64,7 @@ TaskManager.defineTask(STUDENT_BOARDING_TASK_NAME, async ({ data, error }: { dat
   }
 });
 
-let stopTimeout: NodeJS.Timeout | null = null;
+let stopTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export async function startStudentBoardingVerification(eventId: string, durationMs: number) {
   try {

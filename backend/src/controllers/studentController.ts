@@ -237,7 +237,14 @@ export const createStudent = async (req: AuthRequest, res: Response): Promise<vo
   const passwordHash = await bcrypt.hash(password, 10);
 
   const user = await prisma.user.create({
-    data: { name: cleanName, email: cleanEmail, phone: cleanPhone, passwordHash, role: 'STUDENT', status: userStatus },
+    data: { 
+      name: cleanName, 
+      email: cleanEmail, 
+      phone: cleanPhone, 
+      passwordHash, 
+      role: 'STUDENT', 
+      status: userStatus,
+    },
   });
 
   const student = await prisma.student.create({

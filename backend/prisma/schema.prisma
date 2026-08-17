@@ -306,11 +306,12 @@ model SOSAlert {
 model RegistrationRequest {
   id              String @id @default(cuid())
 
-  // Student info (NO password field)
+  // Student info & password hash
   name            String
   studentCode     String
   email           String
   phone           String?
+  passwordHash    String  @default("")
   courseStartYear Int
   courseEndYear   Int
 
@@ -319,33 +320,28 @@ model RegistrationRequest {
   busId   String
   stopId  String
 
-  // Document storage paths in Supabase Storage (student-documents bucket, private)
-  // Path pattern: registrations/{requestId}/college-id.{ext}
-  collegeIdPath String?
-  busSlipPath   String?
+  // Document storage paths & metadata in Supabase Storage (student-documents bucket, private)
+  collegeIdPath       String?
+  collegeIdName       String?
+  collegeIdType       String?
+  collegeIdSize       Int?
+  collegeIdUploadedAt DateTime?
 
-  // Supabase Auth bridge (temporary — deleted after account activation or rejection)
-  supabaseAuthId String? @unique // auth.users.id UUID
+  busSlipPath         String?
+  busSlipName         String?
+  busSlipType         String?
+  busSlipSize         Int?
+  busSlipUploadedAt   DateTime?
 
-  // Email verification (set by backend via Supabase Admin API poll / webhook)
-  emailVerified   Boolean   @default(false)
-  emailVerifiedAt DateTime?
-
-  // Registration lifecycle status
-  // EMAIL_VERIFICATION_PENDING | PENDING_ADMIN_REVIEW | APPROVED | REJECTED
-  status String @default("EMAIL_VERIFICATION_PENDING")
+  // Registration lifecycle status: PENDING | APPROVED | REJECTED
+  status String @default("PENDING")
 
   // Admin review
   reviewedById    String?
   reviewedAt      DateTime?
   rejectionReason String?
 
-  // Password-setup token (set at approval — raw token sent in email, NEVER stored)
-  passwordSetupTokenHash   String?   // SHA-256 of raw token
-  passwordSetupTokenExpiry DateTime?
-  passwordSetupUsed        Boolean   @default(false)
-
-  // Linked student (set when student completes password setup)
+  // Linked student (set when Admin approves request)
   approvedStudentId String? @unique
 
   // Relations
@@ -360,6 +356,5 @@ model RegistrationRequest {
   @@index([email])
   @@index([studentCode])
   @@index([status, createdAt])
-  @@index([supabaseAuthId])
   @@map("registration_requests")
 }

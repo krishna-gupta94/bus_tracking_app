@@ -4,8 +4,8 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
   Search, RefreshCw, Eye, CheckCircle2, XCircle,
-  Mail, Clock, FileText, RotateCcw, ChevronDown,
-  User, Bus, MapPin, Route as RouteIcon, Send,
+  Mail, Clock, FileText,
+  User, Bus, MapPin, Route as RouteIcon, ExternalLink, Download, AlertCircle,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -17,26 +17,38 @@ interface RegRequest {
   phone?: string;
   courseStartYear: number;
   courseEndYear: number;
-  status: 'EMAIL_VERIFICATION_PENDING' | 'PENDING_ADMIN_REVIEW' | 'APPROVED' | 'REJECTED';
-  emailVerified: boolean;
-  emailVerifiedAt?: string;
+  status: 'PENDING' | 'PENDING_ADMIN_REVIEW' | 'EMAIL_VERIFICATION_PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   reviewedAt?: string;
   rejectionReason?: string;
-  passwordSetupUsed: boolean;
   collegeIdPath?: string;
+  collegeIdName?: string;
+  collegeIdType?: string;
+  collegeIdSize?: number;
+  collegeIdUploadedAt?: string;
   busSlipPath?: string;
+  busSlipName?: string;
+  busSlipType?: string;
+  busSlipSize?: number;
+  busSlipUploadedAt?: string;
   route?: { id: string; name: string };
   bus?:   { id: string; busNumber: string };
   stop?:  { id: string; name: string; sequence: number };
+  approvedStudent?: { id: string };
 }
 
-const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
-  EMAIL_VERIFICATION_PENDING: { label: 'Pending Email',   cls: 'badge badge-yellow' },
-  PENDING_ADMIN_REVIEW:       { label: 'Needs Review',    cls: 'badge badge-blue'   },
-  APPROVED:                   { label: 'Approved',        cls: 'badge badge-green'  },
-  REJECTED:                   { label: 'Rejected',        cls: 'badge badge-red'    },
+const getStatusBadge = (status: string) => {
+  if (status === 'APPROVED') return { label: 'Approved', cls: 'badge badge-green' };
+  if (status === 'REJECTED') return { label: 'Rejected', cls: 'badge badge-red' };
+  return { label: 'Pending Review', cls: 'badge badge-yellow' };
 };
+
+function formatBytes(bytes?: number): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function RegistrationRequestsPage() {
@@ -51,7 +63,8 @@ export default function RegistrationRequestsPage() {
   const [detailLoading,   setDetailLoading]   = useState(false);
   const [rejectReason,    setRejectReason]    = useState('');
   const [actionLoading,   setActionLoading]   = useState(false);
-  const [docUrl,          setDocUrl]          = useState<{ type: string; url: string } | null>(null);
+  const [docUrls,         setDocUrls]         = useState<Record<string, { url: string; fileName: string; fileSize?: number; fileType?: string }>>({});
+  const [fetchingDoc,     setFetchingDoc]     = useState<string | null>(null);
 
   // ── Fetch list ───────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
@@ -76,7 +89,7 @@ export default function RegistrationRequestsPage() {
   const openDetail = async (req: RegRequest) => {
     setSelected(req);
     setRejectReason('');
-    setDocUrl(null);
+    setDocUrls({});
     setDetailLoading(true);
     try {
       const res = await api.get(`/registration/requests/${req.id}`);
@@ -91,21 +104,37 @@ export default function RegistrationRequestsPage() {
   // ── Load signed doc URL ──────────────────────────────────────────────────
   const loadDoc = async (docType: 'college-id' | 'bus-slip') => {
     if (!selected) return;
+    setFetchingDoc(docType);
     try {
       const res = await api.get(`/registration/requests/${selected.id}/document-url`, { params: { doc: docType } });
-      setDocUrl({ type: docType, url: res.data.data.signedUrl });
+      const data = res.data.data;
+      setDocUrls(prev => ({
+        ...prev,
+        [docType]: {
+          url: data.signedUrl,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          fileType: data.fileType,
+        },
+      }));
+      window.open(data.signedUrl, '_blank');
     } catch {
-      toast.error('Could not generate document URL');
+      toast.error('Could not generate secure document preview URL');
+    } finally {
+      setFetchingDoc(null);
     }
   };
 
   // ── Approve ──────────────────────────────────────────────────────────────
   const handleApprove = async () => {
     if (!selected) return;
+    if (!window.confirm(`Are you sure you want to approve ${selected.name}'s registration? This will immediately activate their student account.`)) {
+      return;
+    }
     setActionLoading(true);
     try {
       await api.post(`/registration/requests/${selected.id}/approve`, {});
-      toast.success(`Approved! Password-setup email sent to ${selected.email}`);
+      toast.success(`Approved! Student account for ${selected.name} is now active.`);
       setSelected(null);
       fetchRequests();
     } catch (err: any) {
@@ -120,10 +149,13 @@ export default function RegistrationRequestsPage() {
     if (!selected || !rejectReason.trim()) {
       toast.error('Please enter a rejection reason'); return;
     }
+    if (!window.confirm(`Are you sure you want to reject ${selected.name}'s registration?`)) {
+      return;
+    }
     setActionLoading(true);
     try {
       await api.post(`/registration/requests/${selected.id}/reject`, { reason: rejectReason });
-      toast.success('Request rejected and email sent');
+      toast.success('Registration request rejected');
       setSelected(null);
       fetchRequests();
     } catch (err: any) {
@@ -133,19 +165,7 @@ export default function RegistrationRequestsPage() {
     }
   };
 
-  // ── Resend setup link ────────────────────────────────────────────────────
-  const handleResend = async () => {
-    if (!selected) return;
-    setActionLoading(true);
-    try {
-      await api.post(`/registration/requests/${selected.id}/resend-setup-link`, {});
-      toast.success('New password-setup link sent!');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to resend');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const isPending = selected && !['APPROVED', 'REJECTED'].includes(selected.status);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -154,7 +174,7 @@ export default function RegistrationRequestsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Registration Requests</h1>
-          <p className="page-subtitle">{total} total request{total !== 1 ? 's' : ''}</p>
+          <p className="page-subtitle">{total} total registration request{total !== 1 ? 's' : ''}</p>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={fetchRequests}>
           <RefreshCw size={14} /> Refresh
@@ -164,11 +184,11 @@ export default function RegistrationRequestsPage() {
       {/* Filters */}
       <div className="card" style={{ padding: '16px 20px', marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div className="search-box" style={{ flex: 1, minWidth: 200 }}>
+          <div className="search-box" style={{ flex: 1, minWidth: 220 }}>
             <Search size={15} className="search-icon" />
             <input
               className="search-input"
-              placeholder="Search by name, email, student ID…"
+              placeholder="Search by student name, email, student ID…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
             />
@@ -179,9 +199,8 @@ export default function RegistrationRequestsPage() {
             onChange={e => { setFilter(e.target.value); setPage(1); }}
             style={{ minWidth: 180 }}
           >
-            <option value="">All Statuses</option>
-            <option value="EMAIL_VERIFICATION_PENDING">Pending Email</option>
-            <option value="PENDING_ADMIN_REVIEW">Needs Review</option>
+            <option value="">All Requests</option>
+            <option value="PENDING">Pending Review</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
           </select>
@@ -202,42 +221,57 @@ export default function RegistrationRequestsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Student</th>
-                <th>Email</th>
+                <th>Applicant</th>
+                <th>Contact</th>
                 <th>Course</th>
-                <th>Route / Bus</th>
+                <th>Assigned Route &amp; Bus</th>
                 <th>Status</th>
-                <th>Email ✓</th>
+                <th>Documents</th>
                 <th>Submitted</th>
-                <th>Actions</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {requests.map(req => {
-                const s = STATUS_STYLE[req.status] ?? { label: req.status, cls: 'badge' };
+                const s = getStatusBadge(req.status);
+                const hasDocs = req.collegeIdPath || req.busSlipPath;
                 return (
                   <tr key={req.id}>
                     <td>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{req.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{req.studentCode}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>ID: {req.studentCode}</div>
                     </td>
-                    <td style={{ fontSize: 13 }}>{req.email}</td>
+                    <td style={{ fontSize: 13 }}>
+                      <div>{req.email}</div>
+                      {req.phone && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{req.phone}</div>}
+                    </td>
                     <td style={{ fontSize: 13 }}>{req.courseStartYear}–{req.courseEndYear}</td>
                     <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      {req.route?.name ?? '—'}<br />{req.bus ? `Bus ${req.bus.busNumber}` : '—'}
+                      <strong>{req.route?.name ?? '—'}</strong><br />
+                      {req.bus ? `Bus ${req.bus.busNumber}` : '—'} &bull; {req.stop ? req.stop.name : '—'}
                     </td>
                     <td><span className={s.cls}>{s.label}</span></td>
-                    <td style={{ textAlign: 'center' }}>
-                      {req.emailVerified
-                        ? <CheckCircle2 size={16} color="var(--success)" />
-                        : <XCircle size={16} color="var(--text-muted)" />}
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {req.collegeIdPath && (
+                          <span className="badge" style={{ fontSize: 10, background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                            College ID
+                          </span>
+                        )}
+                        {req.busSlipPath && (
+                          <span className="badge" style={{ fontSize: 10, background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                            Bus Slip
+                          </span>
+                        )}
+                        {!hasDocs && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No docs</span>}
+                      </div>
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {new Date(req.createdAt).toLocaleDateString()}
                     </td>
-                    <td>
-                      <button className="btn btn-ghost btn-icon btn-sm" title="Review" onClick={() => openDetail(req)}>
-                        <Eye size={15} />
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-secondary btn-sm" title="Review" onClick={() => openDetail(req)}>
+                        <Eye size={14} /> Review
                       </button>
                     </td>
                   </tr>
@@ -251,9 +285,9 @@ export default function RegistrationRequestsPage() {
       {/* Detail Modal */}
       {selected && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal-content" style={{ maxWidth: 680, width: '95%' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: 720, width: '95%' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Registration Detail</h2>
+              <h2 className="modal-title">Registration Request Review</h2>
               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setSelected(null)}>
                 <XCircle size={18} />
               </button>
@@ -262,19 +296,19 @@ export default function RegistrationRequestsPage() {
             {detailLoading ? (
               <div style={{ padding: 48, textAlign: 'center' }}><div className="spinner spinner-md" /></div>
             ) : (
-              <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div className="modal-body" style={{ maxHeight: '75vh', overflowY: 'auto', padding: '20px' }}>
 
-                {/* Status badge */}
-                <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className={STATUS_STYLE[selected.status]?.cls ?? 'badge'} style={{ fontSize: 13 }}>
-                    {STATUS_STYLE[selected.status]?.label ?? selected.status}
-                  </span>
-                  {selected.status === 'APPROVED' && selected.passwordSetupUsed && (
-                    <span className="badge badge-green">Account Active ✓</span>
-                  )}
-                  {selected.status === 'APPROVED' && !selected.passwordSetupUsed && (
-                    <span className="badge badge-yellow">Awaiting Password Setup</span>
-                  )}
+                {/* Status banner */}
+                <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>STATUS:</span>
+                    <span className={getStatusBadge(selected.status).cls} style={{ fontSize: 13, padding: '4px 12px' }}>
+                      {getStatusBadge(selected.status).label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Submitted on {new Date(selected.createdAt).toLocaleString()}
+                  </div>
                 </div>
 
                 {/* Info grid */}
@@ -282,118 +316,149 @@ export default function RegistrationRequestsPage() {
                   {[
                     ['Full Name',    selected.name,        <User size={14} />],
                     ['Student ID',   selected.studentCode, <User size={14} />],
-                    ['Email',        selected.email,       <Mail size={14} />],
-                    ['Phone',        selected.phone || '—', null],
-                    ['Course',       `${selected.courseStartYear} – ${selected.courseEndYear}`, <Clock size={14} />],
-                    ['Email Verified', selected.emailVerified ? `Yes — ${selected.emailVerifiedAt ? new Date(selected.emailVerifiedAt).toLocaleString() : ''}` : 'Not yet', null],
-                    ['Route',        selected.route?.name || '—',        <RouteIcon size={14} />],
-                    ['Bus',          selected.bus ? `Bus ${selected.bus.busNumber}` : '—', <Bus size={14} />],
-                    ['Stop',         selected.stop ? `${selected.stop.sequence}. ${selected.stop.name}` : '—', <MapPin size={14} />],
-                    ['Submitted',    new Date(selected.createdAt).toLocaleString(), <Clock size={14} />],
+                    ['Email Address', selected.email,      <Mail size={14} />],
+                    ['Phone Number', selected.phone || '—', null],
+                    ['Course Duration', `${selected.courseStartYear} – ${selected.courseEndYear}`, <Clock size={14} />],
+                    ['Assigned Route', selected.route?.name || '—', <RouteIcon size={14} />],
+                    ['Assigned Bus', selected.bus ? `Bus ${selected.bus.busNumber}` : '—', <Bus size={14} />],
+                    ['Assigned Stop', selected.stop ? `${selected.stop.sequence}. ${selected.stop.name}` : '—', <MapPin size={14} />],
                   ].map(([label, value, icon]) => (
                     <div key={label as string} style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '10px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
                         {icon as any} {label as string}
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{value as string}</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{value as string}</div>
                     </div>
                   ))}
                 </div>
 
-                {/* Documents */}
-                {(selected.collegeIdPath || selected.busSlipPath) && (
-                  <div style={{ marginBottom: 20 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10 }}>
-                      <FileText size={14} style={{ marginRight: 6 }} />DOCUMENTS
-                    </h4>
-                    <div style={{ display: 'flex', gap: 10 }}>
+                {/* Uploaded Documents */}
+                <div style={{ marginBottom: 24, padding: '16px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <FileText size={15} color="var(--primary)" /> UPLOADED DOCUMENTS &amp; ELIGIBILITY PROOF
+                  </h4>
+
+                  {(!selected.collegeIdPath && !selected.busSlipPath) ? (
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No documents uploaded for this request.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {/* College ID Card */}
                       {selected.collegeIdPath && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => loadDoc('college-id')}>
-                          <Eye size={14} /> College ID
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                              College ID Card
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {selected.collegeIdName || 'college-id.pdf'} {selected.collegeIdSize ? `• ${formatBytes(selected.collegeIdSize)}` : ''}
+                              {selected.collegeIdType ? ` • ${selected.collegeIdType}` : ''}
+                            </div>
+                          </div>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                            onClick={() => loadDoc('college-id')}
+                            disabled={fetchingDoc === 'college-id'}
+                          >
+                            {fetchingDoc === 'college-id' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
+                            View / Preview
+                          </button>
+                        </div>
                       )}
+
+                      {/* Bus Slip / Fee Receipt */}
                       {selected.busSlipPath && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => loadDoc('bus-slip')}>
-                          <Eye size={14} /> Bus Slip
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                              Bus Slip / Fee Receipt
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {selected.busSlipName || 'bus-slip.pdf'} {selected.busSlipSize ? `• ${formatBytes(selected.busSlipSize)}` : ''}
+                              {selected.busSlipType ? ` • ${selected.busSlipType}` : ''}
+                            </div>
+                          </div>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                            onClick={() => loadDoc('bus-slip')}
+                            disabled={fetchingDoc === 'bus-slip'}
+                          >
+                            {fetchingDoc === 'bus-slip' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
+                            View / Preview
+                          </button>
+                        </div>
                       )}
                     </div>
-                    {docUrl && (
-                      <div style={{ marginTop: 10 }}>
-                        <a href={docUrl.url} target="_blank" rel="noopener noreferrer"
-                          className="btn btn-primary btn-sm" style={{ display: 'inline-flex', gap: 6 }}>
-                          <Eye size={14} /> Open {docUrl.type === 'college-id' ? 'College ID' : 'Bus Slip'} (15 min link)
-                        </a>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                          ⚠ Link expires in 15 minutes. Do not share.
-                        </div>
-                      </div>
-                    )}
+                  )}
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>
+                    🔒 Document URLs are cryptographically signed and expire in 15 minutes.
+                  </p>
+                </div>
+
+                {/* Approved State */}
+                {selected.status === 'APPROVED' && (
+                  <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <CheckCircle2 size={18} /> Student Account Active
+                    </div>
+                    <div style={{ fontSize: 12, color: '#15803d', marginTop: 4 }}>
+                      This registration was approved{selected.reviewedAt ? ` on ${new Date(selected.reviewedAt).toLocaleString()}` : ''}. The student can now log into the Student App directly using their email and chosen password.
+                    </div>
                   </div>
                 )}
 
-                {/* Rejection reason (show if rejected) */}
-                {selected.status === 'REJECTED' && selected.rejectionReason && (
-                  <div style={{ background: 'var(--bg-danger)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger)', marginBottom: 6 }}>Rejection Reason</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{selected.rejectionReason}</div>
+                {/* Rejected State */}
+                {selected.status === 'REJECTED' && (
+                  <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <XCircle size={18} /> Registration Rejected
+                    </div>
+                    <div style={{ fontSize: 13, color: '#b91c1c', marginTop: 4 }}>
+                      <strong>Reason:</strong> {selected.rejectionReason || 'No specific reason provided.'}
+                    </div>
                   </div>
                 )}
 
-                {/* Actions */}
-                {selected.status === 'PENDING_ADMIN_REVIEW' && (
+                {/* Review Decision Actions (for pending requests) */}
+                {isPending && (
                   <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12 }}>REVIEW DECISION</h4>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                      ADMIN DECISION
+                    </h4>
 
-                    {/* Approve */}
+                    {/* Approve button */}
                     <button
                       className="btn btn-primary"
-                      style={{ width: '100%', marginBottom: 16, justifyContent: 'center' }}
+                      style={{ width: '100%', marginBottom: 16, justifyContent: 'center', padding: '12px' }}
                       onClick={handleApprove}
-                      disabled={actionLoading || !selected.emailVerified}
-                    >
-                      {actionLoading ? <div className="spinner spinner-sm" /> : <><CheckCircle2 size={15} /> Approve &amp; Send Password-Setup Email</>}
-                    </button>
-                    {!selected.emailVerified && (
-                      <p style={{ fontSize: 12, color: 'var(--warning)', marginTop: -10, marginBottom: 12 }}>
-                        ⚠ Email not verified yet — student must click the verification link first.
-                      </p>
-                    )}
-
-                    {/* Reject */}
-                    <textarea
-                      className="form-input"
-                      rows={3}
-                      placeholder="Rejection reason (required) — this will be emailed to the student…"
-                      value={rejectReason}
-                      onChange={e => setRejectReason(e.target.value)}
-                      style={{ width: '100%', marginBottom: 8, resize: 'vertical' }}
-                    />
-                    <button
-                      className="btn btn-danger"
-                      style={{ width: '100%', justifyContent: 'center' }}
-                      onClick={handleReject}
-                      disabled={actionLoading || !rejectReason.trim()}
-                    >
-                      {actionLoading ? <div className="spinner spinner-sm" /> : <><XCircle size={15} /> Reject Registration</>}
-                    </button>
-                  </div>
-                )}
-
-                {/* Resend setup link (if APPROVED but not yet set up) */}
-                {selected.status === 'APPROVED' && !selected.passwordSetupUsed && (
-                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 8 }}>
-                    <button
-                      className="btn btn-secondary"
-                      style={{ width: '100%', justifyContent: 'center' }}
-                      onClick={handleResend}
                       disabled={actionLoading}
                     >
-                      {actionLoading ? <div className="spinner spinner-sm" /> : <><Send size={14} /> Resend Password-Setup Email</>}
+                      {actionLoading ? <div className="spinner spinner-sm" /> : <><CheckCircle2 size={16} /> Approve Registration &amp; Activate Account</>}
                     </button>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
-                      Use this if the student's link expired (72-hour TTL).
-                    </p>
+
+                    {/* Reject section */}
+                    <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                        Rejection Reason (if rejecting):
+                      </label>
+                      <textarea
+                        className="form-input"
+                        rows={2}
+                        placeholder="e.g. Invalid bus fee receipt uploaded, please submit official receipt…"
+                        value={rejectReason}
+                        onChange={e => setRejectReason(e.target.value)}
+                        style={{ width: '100%', marginBottom: 10, resize: 'vertical' }}
+                      />
+                      <button
+                        className="btn btn-danger"
+                        style={{ width: '100%', justifyContent: 'center' }}
+                        onClick={handleReject}
+                        disabled={actionLoading || !rejectReason.trim()}
+                      >
+                        {actionLoading ? <div className="spinner spinner-sm" /> : <><XCircle size={15} /> Reject Registration</>}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -404,3 +469,4 @@ export default function RegistrationRequestsPage() {
     </div>
   );
 }
+

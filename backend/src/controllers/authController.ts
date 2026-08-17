@@ -40,34 +40,62 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
   // 1. Try finding user by email (case-insensitive)
   let targetUserId: string | null = null;
-  const userByEmail: any[] = await prisma.$queryRaw`
-    SELECT id FROM users WHERE LOWER(TRIM(email)) = LOWER(${loginInput}) LIMIT 1
-  `;
-  if (userByEmail.length > 0) {
-    targetUserId = userByEmail[0].id;
+  const userByEmail = await prisma.user.findFirst({
+    where: { email: { equals: loginInput, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (userByEmail) {
+    targetUserId = userByEmail.id;
   }
 
   // 2. Try finding user by Driver ID (driverCode, case-insensitive)
   if (!targetUserId) {
-    const driverMatch: any[] = await prisma.$queryRaw`
-      SELECT userId FROM drivers WHERE LOWER(TRIM(driverCode)) = LOWER(${loginInput}) LIMIT 1
-    `;
-    if (driverMatch.length > 0) {
-      targetUserId = driverMatch[0].userId;
+    const driverMatch = await prisma.driver.findFirst({
+      where: { driverCode: { equals: loginInput, mode: 'insensitive' } },
+      select: { userId: true },
+    });
+    if (driverMatch) {
+      targetUserId = driverMatch.userId;
     }
   }
 
   // 3. Try finding user by Student ID (studentCode, case-insensitive)
   if (!targetUserId) {
-    const studentMatch: any[] = await prisma.$queryRaw`
-      SELECT userId FROM students WHERE LOWER(TRIM(studentCode)) = LOWER(${loginInput}) LIMIT 1
-    `;
-    if (studentMatch.length > 0) {
-      targetUserId = studentMatch[0].userId;
+    const studentMatch = await prisma.student.findFirst({
+      where: { studentCode: { equals: loginInput, mode: 'insensitive' } },
+      select: { userId: true },
+    });
+    if (studentMatch) {
+      targetUserId = studentMatch.userId;
     }
   }
 
-  if (!targetUserId) throw createError('Invalid email, ID, or password', 401);
+  // 4. If not found in active users, check if a registration request exists
+  if (!targetUserId) {
+    const regReq = await prisma.registrationRequest.findFirst({
+      where: {
+        OR: [
+          { email: { equals: loginInput, mode: 'insensitive' } },
+          { studentCode: { equals: loginInput, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, status: true, rejectionReason: true },
+    });
+
+    if (regReq) {
+      if (['PENDING', 'PENDING_ADMIN_REVIEW', 'EMAIL_VERIFICATION_PENDING'].includes(regReq.status)) {
+        throw createError('Your registration request is awaiting Admin approval.', 403);
+      }
+      if (regReq.status === 'REJECTED') {
+        const msg = regReq.rejectionReason
+          ? `Your registration request was rejected: ${regReq.rejectionReason}. Please contact the college administration.`
+          : 'Your registration request was rejected. Please contact the college administration.';
+        throw createError(msg, 403);
+      }
+    }
+
+    throw createError('Invalid email, ID, or password', 401);
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: targetUserId },

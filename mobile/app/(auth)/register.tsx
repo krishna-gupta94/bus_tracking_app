@@ -37,11 +37,14 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Step 1: Personal Info
+  // Step 1: Personal Info & Password
   const [name, setName] = useState('');
   const [studentCode, setStudentCode] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // Step 2: Course Years
   const [courseStartYear, setCourseStartYear] = useState('');
@@ -65,7 +68,11 @@ export default function RegisterScreen() {
 
   // ── Validation per step ───────────────────────────────────────────────────
   const canProceed: Record<number, boolean> = {
-    0: name.trim().length >= 2 && studentCode.trim().length >= 2 && /\S+@\S+\.\S+/.test(email),
+    0: name.trim().length >= 2 &&
+       studentCode.trim().length >= 2 &&
+       /\S+@\S+\.\S+/.test(email) &&
+       password.length >= 6 &&
+       password === confirmPassword,
     1: courseStartYear.length === 4 && courseEndYear.length === 4 &&
        parseInt(courseEndYear) >= parseInt(courseStartYear),
     2: !!selectedRoute && !!selectedBus && !!selectedStop,
@@ -127,9 +134,7 @@ export default function RegisterScreen() {
     }
   };
 
-  // goNext no longer triggers loadRoutes — useEffect handles it
   const goNext = () => setStep(s => s + 1);
-
   const goBack = () => setStep(s => s - 1);
 
   // ── Document picking ──────────────────────────────────────────────────────
@@ -166,12 +171,13 @@ export default function RegisterScreen() {
     if (!selectedRoute || !selectedBus || !selectedStop || !collegeId || !busSlip) return;
     setSubmitting(true);
     try {
-      // 1. Submit registration (creates RegistrationRequest + triggers verification email)
+      // 1. Submit registration with password (status = PENDING)
       const { requestId } = await submitRegistration(serverUrl, {
         name: name.trim(),
         studentCode: studentCode.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim() || undefined,
+        password,
         courseStartYear: parseInt(courseStartYear),
         courseEndYear: parseInt(courseEndYear),
         routeId: selectedRoute.id,
@@ -185,13 +191,13 @@ export default function RegisterScreen() {
         uploadDoc(serverUrl, requestId, 'bus-slip', busSlip.uri, busSlip.mimeType),
       ]);
 
-      // 3. Store requestId for status polling
+      // 3. Store requestId
       await AsyncStorage.setItem('registrationRequestId', requestId);
 
       Alert.alert(
         'Registration Submitted! 🎉',
-        `A verification email has been sent to ${email.trim()}.\n\nPlease click the link in the email to verify your address.`,
-        [{ text: 'Check Status', onPress: () => router.replace('/(auth)/registration-status') }]
+        `Your registration request has been submitted for administrator review.\n\nOnce approved by the college transport office, you can log in directly using your email and password.`,
+        [{ text: 'Go to Login', onPress: () => router.replace('/(auth)/login') }]
       );
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Submission failed. Please try again.';
@@ -209,7 +215,7 @@ export default function RegisterScreen() {
         <TouchableOpacity onPress={() => step === 0 ? router.back() : goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Account</Text>
+        <Text style={styles.headerTitle}>Create Student Account</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -230,18 +236,42 @@ export default function RegisterScreen() {
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
 
-        {/* Step 0: Personal Info */}
+        {/* Step 0: Personal Info & Password */}
         {step === 0 && (
           <View>
-            <Field label="Full Name *" value={name} onChange={setName} placeholder="Your full name" />
-            <Field label="Student ID *" value={studentCode} onChange={setStudentCode}
+            <Field label="Full Name *" value={name} onChange={setName} placeholder="e.g. Krishna Gupta" />
+            <Field label="Student ID / Code *" value={studentCode} onChange={setStudentCode}
               placeholder="e.g. STU2024001" autoCapitalize="characters" />
             <Field label="Email Address *" value={email} onChange={setEmail}
-              placeholder="student@college.edu" keyboardType="email-address" />
+              placeholder="student@college.edu" keyboardType="email-address" autoCapitalize="none" />
             <Field label="Phone Number" value={phone} onChange={setPhone}
-              placeholder="+92 300 0000000" keyboardType="phone-pad" />
+              placeholder="+91 9876543210" keyboardType="phone-pad" />
+            
+            <Field
+              label="Password *"
+              value={password}
+              onChange={setPassword}
+              placeholder="Min 6 characters"
+              secureTextEntry={!showPassword}
+              rightIcon={
+                <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              }
+            />
+            <Field
+              label="Confirm Password *"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              placeholder="Re-enter password"
+              secureTextEntry={!showPassword}
+            />
+            {password && confirmPassword && password !== confirmPassword && (
+              <Text style={styles.errorText}>Passwords do not match</Text>
+            )}
+
             <Text style={styles.hint}>
-              ℹ️ No password is required now. You'll set your password after Admin approval via a secure email link.
+              🔒 Create a password to log into your account once your registration is approved by the admin.
             </Text>
           </View>
         )}
@@ -348,20 +378,22 @@ export default function RegisterScreen() {
         {/* Step 4: Review & Submit */}
         {step === 4 && (
           <View>
-            <SummaryRow label="Name"           value={name} />
+            <SummaryRow label="Full Name"      value={name} />
             <SummaryRow label="Student ID"     value={studentCode} />
-            <SummaryRow label="Email"          value={email} />
+            <SummaryRow label="Email Address"  value={email} />
             {phone ? <SummaryRow label="Phone" value={phone} /> : null}
-            <SummaryRow label="Course"         value={`${courseStartYear} – ${courseEndYear}`} />
-            <SummaryRow label="Route"          value={selectedRoute?.name || ''} />
-            <SummaryRow label="Bus"            value={`Bus ${selectedBus?.busNumber}`} />
-            <SummaryRow label="Stop"           value={selectedStop?.name || ''} />
-            <SummaryRow label="College ID"     value={collegeId?.name || ''} />
-            <SummaryRow label="Bus Slip"       value={busSlip?.name || ''} />
+            <SummaryRow label="Course Duration" value={`${courseStartYear} – ${courseEndYear}`} />
+            <SummaryRow label="Assigned Route" value={selectedRoute?.name || ''} />
+            <SummaryRow label="Assigned Bus"   value={`Bus ${selectedBus?.busNumber}`} />
+            <SummaryRow label="Assigned Stop"  value={selectedStop?.name || ''} />
+            <SummaryRow label="College ID Doc" value={collegeId?.name || ''} />
+            <SummaryRow label="Bus Slip Doc"   value={busSlip?.name || ''} />
 
-            <Text style={styles.hint}>
-              ✅ After submission, verify your email. Once approved by Admin, you'll receive a secure link to set your password.
-            </Text>
+            <View style={{ marginTop: 16, padding: 12, backgroundColor: '#f0fdf4', borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' }}>
+              <Text style={{ fontSize: 13, color: '#166534', lineHeight: 18 }}>
+                ✅ Once submitted, your registration request will be reviewed by college transport administration. After approval, you can log in directly using your email and chosen password.
+              </Text>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -398,20 +430,24 @@ export default function RegisterScreen() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Field({ label, value, onChange, placeholder, keyboardType, autoCapitalize, maxLength }: any) {
+function Field({ label, value, onChange, placeholder, keyboardType, autoCapitalize, maxLength, secureTextEntry, rightIcon }: any) {
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textDim ?? '#94a3b8'}
-        keyboardType={keyboardType || 'default'}
-        autoCapitalize={autoCapitalize || 'words'}
-        maxLength={maxLength}
-      />
+      <View style={styles.inputRow}>
+        <TextInput
+          style={[styles.input, rightIcon && { paddingRight: 40 }]}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textDim ?? '#94a3b8'}
+          keyboardType={keyboardType || 'default'}
+          autoCapitalize={autoCapitalize || 'words'}
+          maxLength={maxLength}
+          secureTextEntry={secureTextEntry}
+        />
+        {rightIcon && <View style={styles.rightIconWrap}>{rightIcon}</View>}
+      </View>
     </View>
   );
 }
@@ -481,6 +517,8 @@ const styles = StyleSheet.create({
 
   fieldWrap:  { marginBottom: 16 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textPrimary ?? '#f1f5f9', marginBottom: 6 },
+  inputRow:   { position: 'relative', justifyContent: 'center' },
+  rightIconWrap: { position: 'absolute', right: 12, top: 14 },
   input:      { backgroundColor: colors.surface ?? '#1e293b', borderRadius: 12,
                 paddingHorizontal: 14, paddingVertical: 12, fontSize: 14,
                 color: colors.textPrimary ?? '#f1f5f9', borderWidth: 1,

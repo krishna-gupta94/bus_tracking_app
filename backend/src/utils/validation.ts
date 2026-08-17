@@ -16,19 +16,15 @@ export async function assertEmailUnique(email: string, excludeUserId?: string): 
   const cleanEmail = normalizeString(email).toLowerCase();
   if (!cleanEmail) throw createError('Email is required', 400);
 
-  const existing: any[] = excludeUserId
-    ? await prisma.$queryRaw`
-        SELECT id, email FROM users
-        WHERE LOWER(TRIM(email)) = LOWER(${cleanEmail}) AND id != ${excludeUserId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, email FROM users
-        WHERE LOWER(TRIM(email)) = LOWER(${cleanEmail})
-        LIMIT 1
-      `;
+  const existing = await prisma.user.findFirst({
+    where: {
+      email: { equals: cleanEmail, mode: 'insensitive' },
+      ...(excludeUserId && { id: { not: excludeUserId } }),
+    },
+    select: { id: true },
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(`Email "${cleanEmail}" is already in use`, 400);
   }
 }
@@ -40,19 +36,15 @@ export async function assertPhoneUnique(phone: string | null | undefined, exclud
   const cleanPhone = normalizeString(phone);
   if (!cleanPhone) return;
 
-  const existing: any[] = excludeUserId
-    ? await prisma.$queryRaw`
-        SELECT id, phone FROM users
-        WHERE TRIM(phone) = ${cleanPhone} AND id != ${excludeUserId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, phone FROM users
-        WHERE TRIM(phone) = ${cleanPhone}
-        LIMIT 1
-      `;
+  const existing = await prisma.user.findFirst({
+    where: {
+      phone: cleanPhone,
+      ...(excludeUserId && { id: { not: excludeUserId } }),
+    },
+    select: { id: true },
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(`Phone number "${cleanPhone}" is already registered to another user`, 400);
   }
 }
@@ -64,19 +56,15 @@ export async function assertDriverCodeUnique(driverCode: string, excludeDriverId
   const cleanCode = normalizeString(driverCode);
   if (!cleanCode) throw createError('Driver ID is required', 400);
 
-  const existing: any[] = excludeDriverId
-    ? await prisma.$queryRaw`
-        SELECT id, driverCode FROM drivers
-        WHERE LOWER(TRIM(driverCode)) = LOWER(${cleanCode}) AND id != ${excludeDriverId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, driverCode FROM drivers
-        WHERE LOWER(TRIM(driverCode)) = LOWER(${cleanCode})
-        LIMIT 1
-      `;
+  const existing = await prisma.driver.findFirst({
+    where: {
+      driverCode: { equals: cleanCode, mode: 'insensitive' },
+      ...(excludeDriverId && { id: { not: excludeDriverId } }),
+    },
+    select: { id: true },
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(`Driver ID "${cleanCode}" is already in use`, 400);
   }
 }
@@ -88,19 +76,15 @@ export async function assertStudentCodeUnique(studentCode: string, excludeStuden
   const cleanCode = normalizeString(studentCode);
   if (!cleanCode) throw createError('Student ID / Code is required', 400);
 
-  const existing: any[] = excludeStudentId
-    ? await prisma.$queryRaw`
-        SELECT id, studentCode FROM students
-        WHERE LOWER(TRIM(studentCode)) = LOWER(${cleanCode}) AND id != ${excludeStudentId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, studentCode FROM students
-        WHERE LOWER(TRIM(studentCode)) = LOWER(${cleanCode})
-        LIMIT 1
-      `;
+  const existing = await prisma.student.findFirst({
+    where: {
+      studentCode: { equals: cleanCode, mode: 'insensitive' },
+      ...(excludeStudentId && { id: { not: excludeStudentId } }),
+    },
+    select: { id: true },
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(`Student ID / Code "${cleanCode}" is already in use`, 400);
   }
 }
@@ -112,19 +96,15 @@ export async function assertBusNumberUnique(busNumber: string, excludeBusId?: st
   const cleanBusNum = normalizeString(busNumber);
   if (!cleanBusNum) throw createError('Bus number is required', 400);
 
-  const existing: any[] = excludeBusId
-    ? await prisma.$queryRaw`
-        SELECT id, busNumber FROM buses
-        WHERE LOWER(TRIM(busNumber)) = LOWER(${cleanBusNum}) AND id != ${excludeBusId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, busNumber FROM buses
-        WHERE LOWER(TRIM(busNumber)) = LOWER(${cleanBusNum})
-        LIMIT 1
-      `;
+  const existing = await prisma.bus.findFirst({
+    where: {
+      busNumber: { equals: cleanBusNum, mode: 'insensitive' },
+      ...(excludeBusId && { id: { not: excludeBusId } }),
+    },
+    select: { id: true },
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(`Bus number "${cleanBusNum}" already exists`, 400);
   }
 }
@@ -136,19 +116,15 @@ export async function assertBusRegistrationUnique(registrationNumber: string, ex
   const cleanReg = normalizeString(registrationNumber);
   if (!cleanReg) throw createError('Registration number is required', 400);
 
-  const existing: any[] = excludeBusId
-    ? await prisma.$queryRaw`
-        SELECT id, registrationNumber FROM buses
-        WHERE LOWER(TRIM(registrationNumber)) = LOWER(${cleanReg}) AND id != ${excludeBusId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, registrationNumber FROM buses
-        WHERE LOWER(TRIM(registrationNumber)) = LOWER(${cleanReg})
-        LIMIT 1
-      `;
+  const existing = await prisma.bus.findFirst({
+    where: {
+      registrationNumber: { equals: cleanReg, mode: 'insensitive' },
+      ...(excludeBusId && { id: { not: excludeBusId } }),
+    },
+    select: { id: true },
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(`Registration number "${cleanReg}" already exists`, 400);
   }
 }

@@ -12,13 +12,14 @@ export async function submitRegistration(
     studentCode: string;
     email: string;
     phone?: string;
+    password: string;
     courseStartYear: number;
     courseEndYear: number;
     routeId: string;
     busId: string;
     stopId: string;
   }
-): Promise<{ requestId: string; email: string; status: string }> {
+): Promise<{ requestId: string; email: string; studentCode: string; status: string }> {
   const res = await axios.post(`${serverUrl}/registration/submit`, data, { timeout: 15000 });
   return res.data.data;
 }
@@ -83,7 +84,7 @@ export async function uploadRegistrationDoc(
     fileUri,
     {
       httpMethod: 'POST',
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? 0,
       fieldName: 'file',
       mimeType,
       parameters: {
@@ -116,7 +117,7 @@ export async function uploadDoc(
 
   const result = await FileSystem.uploadAsync(uploadUrl, fileUri, {
     httpMethod: 'POST',
-    uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+    uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? 0,
     fieldName: 'file',
     mimeType,
     parameters: { requestId, docType },
