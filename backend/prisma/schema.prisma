@@ -42,8 +42,11 @@ model Student {
   assignedRouteId String?
   assignedStop    Stop?  @relation("StudentStop", fields: [assignedStopId], references: [id])
   assignedStopId  String?
+  assignedBus     Bus?   @relation("StudentBus", fields: [assignedBusId], references: [id])
+  assignedBusId   String?
 
-  boardingEvents BoardingEvent[]
+  boardingEvents      BoardingEvent[]
+  registrationRequest RegistrationRequest?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -79,9 +82,11 @@ model Bus {
   route   Route?  @relation(fields: [routeId], references: [id])
   routeId String?
 
-  trips          Trip[]
-  locations      BusLocation[]
-  boardingEvents BoardingEvent[]
+  trips                Trip[]
+  locations            BusLocation[]
+  boardingEvents       BoardingEvent[]
+  students             Student[]              @relation("StudentBus")
+  registrationRequests RegistrationRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -95,12 +100,13 @@ model Route {
   description String?
   status      String  @default("ACTIVE")
 
-  stops             Stop[]
-  buses             Bus[]
-  trips             Trip[]
-  students          Student[]                 @relation("StudentRoute")
-  historicalMetrics HistoricalSegmentMetric[]
-  boardingEvents    BoardingEvent[]
+  stops                Stop[]
+  buses                Bus[]
+  trips                Trip[]
+  students             Student[]                 @relation("StudentRoute")
+  historicalMetrics    HistoricalSegmentMetric[]
+  boardingEvents       BoardingEvent[]
+  registrationRequests RegistrationRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -122,7 +128,8 @@ model Stop {
   route   Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
   routeId String
 
-  students Student[] @relation("StudentStop")
+  students             Student[]            @relation("StudentStop")
+  registrationRequests RegistrationRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -296,3 +303,63 @@ model SOSAlert {
   @@map("sos_alerts")
 }
 
+model RegistrationRequest {
+  id              String @id @default(cuid())
+
+  // Student info (NO password field)
+  name            String
+  studentCode     String
+  email           String
+  phone           String?
+  courseStartYear Int
+  courseEndYear   Int
+
+  // Validated selection IDs
+  routeId String
+  busId   String
+  stopId  String
+
+  // Document storage paths in Supabase Storage (student-documents bucket, private)
+  // Path pattern: registrations/{requestId}/college-id.{ext}
+  collegeIdPath String?
+  busSlipPath   String?
+
+  // Supabase Auth bridge (temporary — deleted after account activation or rejection)
+  supabaseAuthId String? @unique // auth.users.id UUID
+
+  // Email verification (set by backend via Supabase Admin API poll / webhook)
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+
+  // Registration lifecycle status
+  // EMAIL_VERIFICATION_PENDING | PENDING_ADMIN_REVIEW | APPROVED | REJECTED
+  status String @default("EMAIL_VERIFICATION_PENDING")
+
+  // Admin review
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  // Password-setup token (set at approval — raw token sent in email, NEVER stored)
+  passwordSetupTokenHash   String?   // SHA-256 of raw token
+  passwordSetupTokenExpiry DateTime?
+  passwordSetupUsed        Boolean   @default(false)
+
+  // Linked student (set when student completes password setup)
+  approvedStudentId String? @unique
+
+  // Relations
+  route           Route    @relation(fields: [routeId], references: [id])
+  bus             Bus      @relation(fields: [busId], references: [id])
+  stop            Stop     @relation(fields: [stopId], references: [id])
+  approvedStudent Student? @relation(fields: [approvedStudentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([studentCode])
+  @@index([status, createdAt])
+  @@index([supabaseAuthId])
+  @@map("registration_requests")
+}

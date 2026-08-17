@@ -131,6 +131,9 @@ function RootLayoutNav() {
         }}
       >
         <Stack.Screen name="(auth)/login" />
+        <Stack.Screen name="(auth)/register" />
+        <Stack.Screen name="(auth)/registration-status" />
+        <Stack.Screen name="(auth)/setup-password" />
         <Stack.Screen name="(student)" />
         <Stack.Screen name="(driver)" />
       </Stack>

@@ -1,11 +1,14 @@
 'use client';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
   Plus, Edit2, Trash2, X, MapPin, ChevronDown, ChevronUp,
   Search, AlertTriangle, Eye, EyeOff, Map as MapIcon, RotateCcw,
+  Bus, Users, User, Phone, Mail, Navigation, Activity, Clock,
+  CheckCircle2, XCircle, Copy, Check, ExternalLink, ShieldCheck
 } from 'lucide-react';
 
 // Dynamically import map (SSR disabled — Leaflet requires browser)
@@ -14,6 +17,47 @@ const StopMapPicker = dynamic(() => import('@/components/StopMapPicker'), { ssr:
 // ─────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────
+interface DriverUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  status: string;
+}
+
+interface DriverInfo {
+  id: string;
+  driverCode: string;
+  user: DriverUser;
+}
+
+interface BusLocation {
+  id: string;
+  latitude: number;
+  longitude: number;
+  speed?: number | null;
+  heading?: number | null;
+  timestamp: string;
+}
+
+interface ActiveTrip {
+  id: string;
+  status: string;
+  startTime: string;
+  locations?: BusLocation[];
+}
+
+interface BusInfo {
+  id: string;
+  busNumber: string;
+  registrationNumber: string;
+  capacity: number;
+  status: string; // 'AVAILABLE' | 'ACTIVE' | 'ON_ROUTE' | 'INACTIVE' | 'MAINTENANCE'
+  driverId?: string | null;
+  driver?: DriverInfo | null;
+  trips?: ActiveTrip[];
+}
+
 interface Stop {
   id: string;
   name: string;
@@ -35,7 +79,8 @@ interface Route {
   description?: string;
   status: string;
   stops: Stop[];
-  _count?: { buses: number; students: number };
+  buses: BusInfo[];
+  _count?: { buses: number; students: number; stops?: number };
 }
 
 interface StopFormData {
@@ -356,51 +401,68 @@ function StopFormModal({
 // ─────────────────────────────────────────────────────────
 // RouteCard
 // ─────────────────────────────────────────────────────────
-function RouteCard({ route, onEdit, onDelete, onStopSaved }: {
+function RouteCard({ route, onEdit, onDelete, onReloadRequired }: {
   route: Route;
   onEdit: (r: Route) => void;
   onDelete: (id: string, name: string) => void;
-  onStopSaved: () => void;   // only called after a stop is created/deleted (to update route stop count in parent)
+  onReloadRequired: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'stops' | 'buses' | 'map'>('stops');
   const [stops, setStops] = useState<Stop[]>(route.stops || []);
+  const [buses, setBuses] = useState<BusInfo[]>(route.buses || []);
   const [loadingStops, setLoadingStops] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [stopModal, setStopModal] = useState<{ open: boolean; stop: Stop | null }>({ open: false, stop: null });
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; stop: Stop | null }>({ open: false, stop: null });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [reordering, setReordering] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
 
-  // Keep local stops in sync when parent route.stops changes (e.g., after parent reloads)
+  // Keep local state in sync when parent route changes
   useEffect(() => {
     setStops(route.stops || []);
-  }, [route.stops]);
+    setBuses(route.buses || []);
+  }, [route.stops, route.buses]);
 
-  // Fetch fresh stops from the API (does NOT trigger parent reload)
-  const fetchStops = useCallback(async () => {
-    setLoadingStops(true);
+  // Fetch full route details including fresh buses, trips and stops
+  const fetchFullRoute = useCallback(async () => {
+    setLoadingDetail(true);
     try {
-      const r = await api.get(`/routes/${route.id}/stops`);
-      setStops(r.data.data);
+      const r = await api.get(`/routes/${route.id}`);
+      if (r.data?.data) {
+        setStops(r.data.data.stops || []);
+        setBuses(r.data.data.buses || []);
+      }
     } catch {
-      toast.error('Failed to load stops');
+      toast.error('Failed to load route details');
     } finally {
-      setLoadingStops(false);
+      setLoadingDetail(false);
     }
   }, [route.id]);
 
-  // Toggle expand — load stops once on first open
+  // Toggle expand
   const handleExpand = () => {
     const opening = !expanded;
     setExpanded(opening);
-    if (opening) fetchStops();
+    if (opening) fetchFullRoute();
   };
 
-  // After a stop is saved or deleted — refresh stops locally + notify parent to update count
+  // Copy route ID to clipboard
+  const handleCopyId = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(route.id);
+    setCopiedId(true);
+    toast.success('Route ID copied to clipboard');
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  // After a stop is saved or deleted
   const afterStopChange = useCallback(async () => {
-    await fetchStops();
-    onStopSaved();
-  }, [fetchStops, onStopSaved]);
+    await fetchFullRoute();
+    onReloadRequired();
+  }, [fetchFullRoute, onReloadRequired]);
 
   // Filtered + sorted stops for display
   const displayStops = useMemo(() => {
@@ -436,10 +498,10 @@ function RouteCard({ route, onEdit, onDelete, onStopSaved }: {
       await api.put(`/routes/${route.id}/stops/reorder`, {
         stops: newStops.map(s => ({ id: s.id, sequence: s.sequence })),
       });
-      toast.success('Order updated');
+      toast.success('Stop sequence updated');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Reorder failed');
-      fetchStops();
+      fetchFullRoute();
     } finally {
       setReordering(false);
     }
@@ -459,39 +521,84 @@ function RouteCard({ route, onEdit, onDelete, onStopSaved }: {
 
   const sortedAll = [...stops].sort((a, b) => a.sequence - b.sequence);
 
+  // Driver names summary
+  const driverNames = useMemo(() => {
+    const drivers = buses
+      .map(b => b.driver?.user?.name)
+      .filter((name): name is string => Boolean(name));
+    return Array.from(new Set(drivers));
+  }, [buses]);
+
   return (
     <>
-      <div className="card" style={{ marginBottom: 12 }}>
+      <div className="card" style={{ marginBottom: 16 }}>
         {/* Route Header */}
         <div
           className="card-header"
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', padding: '20px 24px', alignItems: 'flex-start' }}
           onClick={handleExpand}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 className="card-title">{route.name}</h3>
-            {route.description && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{route.description}</p>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <h3 className="card-title" style={{ fontSize: 17 }}>{route.name}</h3>
               <span className={`badge ${route.status === 'ACTIVE' ? 'badge-green' : 'badge-gray'}`}>
                 {route.status}
               </span>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <MapPin size={11} /> {stops.length} stop{stops.length !== 1 ? 's' : ''}
+              <button
+                onClick={handleCopyId}
+                className="route-meta-pill"
+                title="Click to copy Route ID"
+                style={{ cursor: 'pointer', background: 'transparent' }}
+              >
+                {copiedId ? <Check size={11} color="var(--success)" /> : <Copy size={11} />}
+                <span style={{ fontFamily: 'monospace', fontSize: 10.5 }}>ID: {route.id}</span>
+              </button>
+            </div>
+
+            {route.description && (
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                {route.description}
+              </p>
+            )}
+
+            {/* Quick Metadata badges */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span className="route-meta-pill">
+                <MapPin size={12} color="var(--accent)" />
+                <strong>{stops.length}</strong> Stop{stops.length !== 1 ? 's' : ''}
               </span>
-              {route._count?.buses !== undefined && (
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  🚌 {route._count.buses} bus{route._count.buses !== 1 ? 'es' : ''}
+
+              <span className="route-meta-pill">
+                <Bus size={12} color="var(--cyan)" />
+                <strong>{buses.length}</strong> Bus{buses.length !== 1 ? 'es' : ''} Assigned
+              </span>
+
+              {route._count?.students !== undefined && (
+                <span className="route-meta-pill">
+                  <Users size={12} color="var(--purple)" />
+                  <strong>{route._count.students}</strong> Student{route._count.students !== 1 ? 's' : ''}
+                </span>
+              )}
+
+              {driverNames.length > 0 ? (
+                <span className="route-meta-pill">
+                  <User size={12} color="var(--success)" />
+                  Drivers: {driverNames.join(', ')}
+                </span>
+              ) : (
+                <span className="route-meta-pill" style={{ color: 'var(--text-muted)' }}>
+                  <User size={12} />
+                  No drivers assigned
                 </span>
               )}
             </div>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               className="btn btn-ghost btn-icon btn-sm"
               onClick={e => { e.stopPropagation(); onEdit(route); }}
-              title="Edit Route"
+              title="Edit Route Info"
             >
               <Edit2 size={14} />
             </button>
@@ -502,163 +609,378 @@ function RouteCard({ route, onEdit, onDelete, onStopSaved }: {
             >
               <Trash2 size={14} />
             </button>
-            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <div style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
+              {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
           </div>
         </div>
 
-        {/* Expanded Stops Section */}
+        {/* Expanded Route Details Section */}
         {expanded && (
-          <div className="card-body">
-            {/* Stops toolbar */}
-            <div className="stops-section-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  Stops
-                  <span style={{ marginLeft: 6, background: 'var(--accent-glow)', color: 'var(--accent)', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 800 }}>
-                    {stops.length}
-                  </span>
-                </p>
-                {/* Filter chips */}
-                <div className="filter-chips">
-                  {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(f => (
-                    <button
-                      key={f}
-                      className={`chip ${statusFilter === f ? (f === 'INACTIVE' ? 'inactive-chip-sel' : 'active-chip') : ''}`}
-                      onClick={() => setStatusFilter(f)}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="stops-toolbar">
-                {/* Search */}
-                <div className="stop-search">
-                  <Search size={13} />
-                  <input
-                    className="form-input"
-                    style={{ height: 34, fontSize: 12 }}
-                    placeholder="Search stops…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                  />
-                </div>
-                {/* Refresh */}
-                <button
-                  className="btn btn-ghost btn-icon btn-sm"
-                  onClick={fetchStops}
-                  disabled={loadingStops}
-                  title="Refresh stops"
-                >
-                  <RotateCcw size={14} style={loadingStops ? { animation: 'spin 0.7s linear infinite' } : {}} />
-                </button>
-                {/* Add Stop */}
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setStopModal({ open: true, stop: null })}
-                >
-                  <Plus size={14} /> Add Stop
-                </button>
-              </div>
+          <div>
+            {/* Tabs Bar */}
+            <div className="route-tabs">
+              <button
+                className={`route-tab-btn ${activeTab === 'stops' ? 'active' : ''}`}
+                onClick={() => setActiveTab('stops')}
+              >
+                <MapPin size={15} />
+                Stops ({stops.length})
+              </button>
+              <button
+                className={`route-tab-btn ${activeTab === 'buses' ? 'active' : ''}`}
+                onClick={() => setActiveTab('buses')}
+              >
+                <Bus size={15} />
+                Assigned Buses ({buses.length})
+              </button>
+              <button
+                className={`route-tab-btn ${activeTab === 'map' ? 'active' : ''}`}
+                onClick={() => setActiveTab('map')}
+              >
+                <MapIcon size={15} />
+                Route Map View
+              </button>
             </div>
 
-            {/* Stop list */}
-            {loadingStops ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-                <div className="spinner" />
-              </div>
-            ) : displayStops.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
-                {stops.length === 0 ? (
-                  <>
-                    <MapPin size={32} style={{ marginBottom: 8, opacity: 0.3 }} />
-                    <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-secondary)' }}>No stops yet</p>
-                    <p style={{ fontSize: 11, marginTop: 4 }}>Click &ldquo;Add Stop&rdquo; to add your first stop.</p>
-                  </>
-                ) : (
-                  <>
-                    <Search size={28} style={{ marginBottom: 8, opacity: 0.3 }} />
-                    <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-secondary)' }}>No stops match your search</p>
-                    <p style={{ fontSize: 11, marginTop: 4 }}>Try a different search or filter.</p>
-                  </>
-                )}
-              </div>
-            ) : (
-              displayStops.map(s => {
-                const isFirst = sortedAll[0]?.id === s.id;
-                const isLast = sortedAll[sortedAll.length - 1]?.id === s.id;
-                return (
-                  <div key={s.id} className={`stop-item${s.status === 'INACTIVE' ? ' inactive' : ''}`}>
-                    {/* Sequence badge */}
-                    <div className={`stop-seq${s.status === 'INACTIVE' ? ' inactive-seq' : ''}`}>
-                      {s.sequence}
-                    </div>
-
-                    {/* Info */}
-                    <div className="stop-info">
-                      <div className="stop-name">
-                        {s.name}
-                        {s.stopCode && (
-                          <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '1px 7px', borderRadius: 10, fontWeight: 700 }}>
-                            {s.stopCode}
+            <div className="card-body" style={{ padding: 24 }}>
+              {loadingDetail ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                  <div className="spinner" />
+                </div>
+              ) : (
+                <>
+                  {/* ──────────────── TAB 1: STOPS ──────────────── */}
+                  {activeTab === 'stops' && (
+                    <div>
+                      {/* Stops toolbar */}
+                      <div className="stops-section-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                            Route Sequence ({stops.length} total)
                           </span>
-                        )}
-                        {s.status === 'INACTIVE' && (
-                          <span className="badge badge-gray" style={{ marginLeft: 8, fontSize: 9, padding: '1px 6px' }}>INACTIVE</span>
-                        )}
+                          {/* Filter chips */}
+                          <div className="filter-chips">
+                            {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(f => (
+                              <button
+                                key={f}
+                                className={`chip ${statusFilter === f ? (f === 'INACTIVE' ? 'inactive-chip-sel' : 'active-chip') : ''}`}
+                                onClick={() => setStatusFilter(f)}
+                              >
+                                {f}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="stops-toolbar">
+                          {/* Search */}
+                          <div className="stop-search">
+                            <Search size={13} />
+                            <input
+                              className="form-input"
+                              style={{ height: 34, fontSize: 12 }}
+                              placeholder="Search stops…"
+                              value={search}
+                              onChange={e => setSearch(e.target.value)}
+                            />
+                          </div>
+                          {/* Refresh */}
+                          <button
+                            className="btn btn-ghost btn-icon btn-sm"
+                            onClick={fetchFullRoute}
+                            disabled={loadingDetail}
+                            title="Refresh route data"
+                          >
+                            <RotateCcw size={14} style={loadingDetail ? { animation: 'spin 0.7s linear infinite' } : {}} />
+                          </button>
+                          {/* Add Stop */}
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => setStopModal({ open: true, stop: null })}
+                          >
+                            <Plus size={14} /> Add Stop
+                          </button>
+                        </div>
                       </div>
-                      <div className="stop-meta">
-                        {s.address && <span>📍 {s.address}</span>}
-                        <span style={{ fontFamily: 'monospace' }}>{s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}</span>
-                        {s.eta && <span>🕐 ETA: {s.eta}</span>}
+
+                      {/* Stop list */}
+                      {displayStops.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-light)' }}>
+                          {stops.length === 0 ? (
+                            <>
+                              <MapPin size={36} style={{ marginBottom: 8, opacity: 0.3 }} />
+                              <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-secondary)' }}>No stops configured for this route.</p>
+                              <p style={{ fontSize: 12, marginTop: 4 }}>Click &ldquo;Add Stop&rdquo; above to add your first stop location.</p>
+                            </>
+                          ) : (
+                            <>
+                              <Search size={32} style={{ marginBottom: 8, opacity: 0.3 }} />
+                              <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-secondary)' }}>No stops match your search criteria</p>
+                              <p style={{ fontSize: 12, marginTop: 4 }}>Try clearing the search or switching filters.</p>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        displayStops.map(s => {
+                          const isFirst = sortedAll[0]?.id === s.id;
+                          const isLast = sortedAll[sortedAll.length - 1]?.id === s.id;
+                          return (
+                            <div key={s.id} className={`stop-item${s.status === 'INACTIVE' ? ' inactive' : ''}`}>
+                              {/* Sequence badge */}
+                              <div className={`stop-seq${s.status === 'INACTIVE' ? ' inactive-seq' : ''}`}>
+                                {s.sequence}
+                              </div>
+
+                              {/* Info */}
+                              <div className="stop-info">
+                                <div className="stop-name">
+                                  {s.name}
+                                  {s.stopCode && (
+                                    <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '1px 7px', borderRadius: 10, fontWeight: 700 }}>
+                                      {s.stopCode}
+                                    </span>
+                                  )}
+                                  {s.status === 'INACTIVE' && (
+                                    <span className="badge badge-gray" style={{ marginLeft: 8, fontSize: 9, padding: '1px 6px' }}>INACTIVE</span>
+                                  )}
+                                </div>
+                                <div className="stop-meta">
+                                  {s.address && <span>📍 {s.address}</span>}
+                                  <span style={{ fontFamily: 'monospace' }}>🌐 {s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}</span>
+                                  {s.eta && <span>🕐 ETA: {s.eta}</span>}
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="stop-actions">
+                                <button
+                                  className="move-btn"
+                                  onClick={() => moveStop(s.id, 'up')}
+                                  disabled={isFirst || reordering || search !== '' || statusFilter !== 'ALL'}
+                                  title="Move sequence up"
+                                >
+                                  <ChevronUp size={13} />
+                                </button>
+                                <button
+                                  className="move-btn"
+                                  onClick={() => moveStop(s.id, 'down')}
+                                  disabled={isLast || reordering || search !== '' || statusFilter !== 'ALL'}
+                                  title="Move sequence down"
+                                >
+                                  <ChevronDown size={13} />
+                                </button>
+                                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 4px' }} />
+                                <button
+                                  className="btn btn-ghost btn-icon btn-sm"
+                                  onClick={() => setStopModal({ open: true, stop: s })}
+                                  title="Edit stop"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  className="btn btn-danger btn-icon btn-sm"
+                                  onClick={() => setConfirmDelete({ open: true, stop: s })}
+                                  title="Delete stop"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {/* Reorder hint */}
+                      {(search || statusFilter !== 'ALL') && stops.length > 0 && (
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8, fontStyle: 'italic' }}>
+                          Clear search and filters to enable manual sequence reordering
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ──────────────── TAB 2: BUSES & DRIVERS ──────────────── */}
+                  {activeTab === 'buses' && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                        <div>
+                          <h4 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>
+                            Operating Buses on {route.name}
+                          </h4>
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            {buses.length} bus{buses.length !== 1 ? 'es' : ''} assigned via Route ↔ Bus relationship
+                          </p>
+                        </div>
+                        <Link href="/buses" className="btn btn-secondary btn-sm">
+                          <Bus size={13} /> Manage Fleet / Assign Buses
+                        </Link>
                       </div>
-                    </div>
 
-                    {/* Actions */}
-                    <div className="stop-actions">
-                      <button
-                        className="move-btn"
-                        onClick={() => moveStop(s.id, 'up')}
-                        disabled={isFirst || reordering || search !== '' || statusFilter !== 'ALL'}
-                        title="Move up"
-                      >
-                        <ChevronUp size={13} />
-                      </button>
-                      <button
-                        className="move-btn"
-                        onClick={() => moveStop(s.id, 'down')}
-                        disabled={isLast || reordering || search !== '' || statusFilter !== 'ALL'}
-                        title="Move down"
-                      >
-                        <ChevronDown size={13} />
-                      </button>
-                      <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
-                      <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => setStopModal({ open: true, stop: s })}
-                        title="Edit stop"
-                      >
-                        <Edit2 size={13} />
-                      </button>
-                      <button
-                        className="btn btn-danger btn-icon btn-sm"
-                        onClick={() => setConfirmDelete({ open: true, stop: s })}
-                        title="Delete stop"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                      {buses.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-muted)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-light)' }}>
+                          <Bus size={40} style={{ marginBottom: 12, opacity: 0.3 }} />
+                          <p style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-secondary)' }}>
+                            No buses assigned to this route.
+                          </p>
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, maxWidth: 420, margin: '6px auto 16px' }}>
+                            Buses assigned to this route will appear here automatically with their driver and live status.
+                          </p>
+                          <Link href="/buses" className="btn btn-primary btn-sm">
+                            <Plus size={13} /> Assign a Bus to this Route
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="route-bus-grid">
+                          {buses.map(bus => {
+                            const activeTrip = bus.trips?.[0];
+                            const latestLoc = activeTrip?.locations?.[0];
+                            const isLive = Boolean(activeTrip && activeTrip.status === 'ACTIVE');
 
-            {/* Reorder hint when search/filter active */}
-            {(search || statusFilter !== 'ALL') && stops.length > 0 && (
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8, fontStyle: 'italic' }}>
-                Clear search/filter to enable reordering
-              </p>
-            )}
+                            return (
+                              <div key={bus.id} className="route-bus-card">
+                                {/* Bus Card Header */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Bus size={17} />
+                                      </div>
+                                      <div>
+                                        <h5 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
+                                          {bus.busNumber}
+                                        </h5>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                          {bus.registrationNumber}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span className={`badge ${
+                                    bus.status === 'AVAILABLE' ? 'badge-green' :
+                                    bus.status === 'ON_ROUTE' || bus.status === 'ACTIVE' ? 'badge-blue' :
+                                    bus.status === 'MAINTENANCE' ? 'badge-yellow' : 'badge-gray'
+                                  }`}>
+                                    {bus.status}
+                                  </span>
+                                </div>
+
+                                {/* Live Trip Status */}
+                                <div style={{ background: isLive ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg-primary)', border: `1px solid ${isLive ? 'rgba(56, 189, 248, 0.3)' : 'var(--border)'}`, borderRadius: 8, padding: '10px 12px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                      Trip Status
+                                    </span>
+                                    {isLive ? (
+                                      <span className="badge badge-blue pulse-indicator" style={{ fontSize: 10 }}>
+                                        🟢 ON TRIP (LIVE)
+                                      </span>
+                                    ) : (
+                                      <span className="badge badge-gray" style={{ fontSize: 10 }}>
+                                        NO ACTIVE TRIP
+                                      </span>
+                                    )}
+                                  </div>
+                                  {isLive && activeTrip && (
+                                    <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                                      <div>Started: {new Date(activeTrip.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                      {latestLoc && (
+                                        <div style={{ marginTop: 2, fontFamily: 'monospace', color: 'var(--accent)' }}>
+                                          GPS: {latestLoc.latitude.toFixed(4)}, {latestLoc.longitude.toFixed(4)}
+                                          {latestLoc.speed !== null && latestLoc.speed !== undefined && ` • ${Math.round(latestLoc.speed)} km/h`}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Driver Details */}
+                                <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px' }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <User size={13} color="var(--accent)" />
+                                    Assigned Driver
+                                  </div>
+                                  {bus.driver && bus.driver.user ? (
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}>
+                                          {bus.driver.user.name}
+                                        </div>
+                                        <span className="badge badge-purple" style={{ fontSize: 9.5 }}>
+                                          {bus.driver.driverCode}
+                                        </span>
+                                      </div>
+                                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                        {bus.driver.user.phone && (
+                                          <a href={`tel:${bus.driver.user.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
+                                            <Phone size={12} /> {bus.driver.user.phone}
+                                          </a>
+                                        )}
+                                        {bus.driver.user.email && (
+                                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)' }}>
+                                            <Mail size={12} /> {bus.driver.user.email}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <AlertTriangle size={13} color="var(--warning)" />
+                                      No driver assigned to this bus
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Bus Meta Footer */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)', marginTop: 'auto', paddingTop: 4 }}>
+                                  <span>👥 Capacity: {bus.capacity} seats</span>
+                                  <Link href={`/buses`} className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }}>
+                                    View in Fleet <ExternalLink size={10} style={{ marginLeft: 3 }} />
+                                  </Link>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ──────────────── TAB 3: MAP VIEW ──────────────── */}
+                  {activeTab === 'map' && (
+                    <div>
+                      {stops.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>
+                          <MapPin size={36} style={{ marginBottom: 8, opacity: 0.3 }} />
+                          <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-secondary)' }}>
+                            No stops available to map.
+                          </p>
+                          <p style={{ fontSize: 12, marginTop: 4 }}>Add stops to this route to visualize the path.</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                              Interactive Route Path ({stops.length} Stop Locations)
+                            </span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              Sequence from #{stops[0]?.sequence || 1} to #{stops[stops.length - 1]?.sequence || stops.length}
+                            </span>
+                          </div>
+                          <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                            <StopMapPicker
+                              latitude={stops[0]?.latitude || 28.3670}
+                              longitude={stops[0]?.longitude || 79.4304}
+                              existingStops={stops}
+                              onLocationSelect={() => {}}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -715,7 +1037,7 @@ function RouteModal({ route, onClose, onSave }: { route: Route | null; onClose: 
       }
       onSave();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed');
+      toast.error(err.response?.data?.message || 'Failed to save route');
     } finally {
       setSaving(false);
     }
@@ -737,7 +1059,7 @@ function RouteModal({ route, onClose, onSave }: { route: Route | null; onClose: 
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 required
-                placeholder="City Center → College"
+                placeholder="Bareilly City → Invertis Campus"
               />
             </div>
             <div className="form-group">
@@ -746,7 +1068,7 @@ function RouteModal({ route, onClose, onSave }: { route: Route | null; onClose: 
                 className="form-input"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Optional description"
+                placeholder="Optional description of the route"
               />
             </div>
             <div className="form-group">
@@ -788,7 +1110,7 @@ export default function RoutesPage() {
     setLoading(true);
     try {
       const r = await api.get(`/routes?search=${encodeURIComponent(routeSearch)}&status=${statusFilter}`);
-      setRoutes(r.data.data);
+      setRoutes(r.data.data || []);
     } catch {
       toast.error('Failed to load routes');
     } finally {
@@ -799,7 +1121,7 @@ export default function RoutesPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       load();
-    }, 200);
+    }, 250);
     return () => clearTimeout(timer);
   }, [load]);
 
@@ -816,15 +1138,17 @@ export default function RoutesPage() {
   };
 
   const totalStops = routes.reduce((acc, r) => acc + (r.stops?.length || 0), 0);
+  const totalBuses = routes.reduce((acc, r) => acc + (r.buses?.length || 0), 0);
+  const totalStudents = routes.reduce((acc, r) => acc + (r._count?.students || 0), 0);
 
   return (
     <div className="page">
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Routes &amp; Stops</h1>
+          <h1 className="page-title">Routes, Stops &amp; Fleet</h1>
           <p className="page-subtitle">
-            {routes.length} route{routes.length !== 1 ? 's' : ''} &nbsp;·&nbsp; {totalStops} stop{totalStops !== 1 ? 's' : ''} configured
+            {routes.length} Route{routes.length !== 1 ? 's' : ''} &nbsp;·&nbsp; {totalStops} Stop{totalStops !== 1 ? 's' : ''} &nbsp;·&nbsp; {totalBuses} Assigned Bus{totalBuses !== 1 ? 'es' : ''} &nbsp;·&nbsp; {totalStudents} Student{totalStudents !== 1 ? 's' : ''}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -833,7 +1157,7 @@ export default function RoutesPage() {
             <input
               className="form-input"
               style={{ height: 38 }}
-              placeholder="Search by route name, stop, driver or bus…"
+              placeholder="Search by route, stop, bus #, driver, or ID…"
               value={routeSearch}
               onChange={e => setRouteSearch(e.target.value)}
             />
@@ -842,7 +1166,7 @@ export default function RoutesPage() {
             className="form-select"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            style={{ width: 130, height: 38 }}
+            style={{ width: 140, height: 38 }}
           >
             <option value="">All Statuses</option>
             <option value="ACTIVE">Active Only</option>
@@ -863,7 +1187,7 @@ export default function RoutesPage() {
         <div className="empty-state">
           <MapPin size={48} />
           <p>{routeSearch || statusFilter ? 'No routes match your search criteria' : 'No routes yet'}</p>
-          <span>{routeSearch || statusFilter ? 'Try searching by stop name, assigned bus number, or driver.' : 'Create your first route and add stops.'}</span>
+          <span>{routeSearch || statusFilter ? 'Try searching by stop name, assigned bus number, or driver name.' : 'Create your first route and assign stops and buses.'}</span>
         </div>
       ) : (
         routes.map(r => (
@@ -872,7 +1196,7 @@ export default function RoutesPage() {
             route={r}
             onEdit={rt => setModal({ open: true, route: rt })}
             onDelete={(id, name) => setConfirmDelete({ open: true, id, name })}
-            onStopSaved={load}
+            onReloadRequired={load}
           />
         ))
       )}
@@ -890,7 +1214,7 @@ export default function RoutesPage() {
       {confirmDelete?.open && (
         <ConfirmDialog
           title="Delete Route"
-          message={`Are you sure you want to delete route "${confirmDelete.name}"? All associated stops will be permanently deleted.`}
+          message={`Are you sure you want to delete route "${confirmDelete.name}"? All associated stops will be permanently deleted, and assigned buses and students will be unassigned.`}
           confirmLabel="Delete Route"
           onConfirm={doDeleteRoute}
           onCancel={() => setConfirmDelete(null)}

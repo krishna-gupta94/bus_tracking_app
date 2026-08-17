@@ -12,11 +12,13 @@ import {
   Modal,
   Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../src/theme/colors';
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('student1@college.edu');
   const [password, setPassword] = useState('Student@123');
   const [loading, setLoading] = useState(false);
@@ -193,6 +195,22 @@ export default function LoginScreen() {
           <Text style={styles.securityNotice}>
             🔒 Authorized college credentials only. Contact transit administrator for access.
           </Text>
+
+          {/* Registration Links */}
+          <View style={styles.registerRow}>
+            <Text style={styles.registerPrompt}>New student? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/register')} activeOpacity={0.7}>
+              <Text style={styles.registerLink}>Register here</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.statusLinkBtn}
+            onPress={() => router.push('/(auth)/registration-status')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+            <Text style={styles.statusLinkText}>Check registration status</Text>
+          </TouchableOpacity>
 
           {/* Server Config Toggle */}
           <TouchableOpacity
@@ -492,5 +510,33 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
+  },
+  registerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  registerPrompt: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  registerLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  statusLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statusLinkText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
   },
 });

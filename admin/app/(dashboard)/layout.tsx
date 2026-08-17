@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard, Users, Truck, Route,
-  Navigation, History, Bell, Settings, LogOut, Bus, AlertTriangle, Activity
+  Navigation, History, Bell, Settings, LogOut, Bus, AlertTriangle, Activity, ClipboardList
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/buses', icon: Bus, label: 'Buses', section: null },
   { href: '/routes', icon: Route, label: 'Routes', section: null },
   { href: '/students', icon: Users, label: 'Students', section: 'USER ACCOUNTS' },
+  { href: '/registration-requests', icon: ClipboardList, label: 'Registrations', section: null },
   { href: '/drivers', icon: Truck, label: 'Drivers', section: null },
   { href: '/notifications', icon: Bell, label: 'Notifications', section: 'SYSTEM' },
   { href: '/settings', icon: Settings, label: 'Settings', section: null },

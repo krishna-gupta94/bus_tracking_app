@@ -15,6 +15,8 @@ import locationRouter from './routes/locations';
 import notificationRouter from './routes/notifications';
 import boardingRouter from './routes/boarding';
 import sosRouter from './routes/sos';
+import registrationRouter from './routes/registration';
+import uploadRouter from './routes/upload';
 
 const app = express();
 
@@ -50,6 +52,8 @@ app.use('/api/locations', locationRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/boarding', boardingRouter);
 app.use('/api/sos', sosRouter);
+app.use('/api/registration', registrationRouter);
+app.use('/api/upload', uploadRouter);
 
 // 404 handler
 app.use((_req, res) => {

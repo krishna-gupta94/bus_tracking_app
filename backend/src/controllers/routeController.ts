@@ -38,17 +38,17 @@ export const getRoutes = async (req: AuthRequest, res: Response): Promise<void> 
     andConditions.push({
       OR: [
         // Direct Route fields
-        { name: { contains: q } },
-        { description: { contains: q } },
-        { id: { contains: q } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { id: { contains: q, mode: 'insensitive' } },
         // Stops on the route (name, stopCode, address)
         {
           stops: {
             some: {
               OR: [
-                { name: { contains: q } },
-                { stopCode: { contains: q } },
-                { address: { contains: q } },
+                { name: { contains: q, mode: 'insensitive' } },
+                { stopCode: { contains: q, mode: 'insensitive' } },
+                { address: { contains: q, mode: 'insensitive' } },
               ],
             },
           },
@@ -58,15 +58,15 @@ export const getRoutes = async (req: AuthRequest, res: Response): Promise<void> 
           buses: {
             some: {
               OR: [
-                { busNumber: { contains: q } },
-                { registrationNumber: { contains: q } },
+                { busNumber: { contains: q, mode: 'insensitive' } },
+                { registrationNumber: { contains: q, mode: 'insensitive' } },
                 {
                   driver: {
                     OR: [
-                      { driverCode: { contains: q } },
-                      { user: { name: { contains: q } } },
-                      { user: { email: { contains: q } } },
-                      { user: { phone: { contains: q } } },
+                      { driverCode: { contains: q, mode: 'insensitive' } },
+                      { user: { name: { contains: q, mode: 'insensitive' } } },
+                      { user: { email: { contains: q, mode: 'insensitive' } } },
+                      { user: { phone: { contains: q, mode: 'insensitive' } } },
                     ],
                   },
                 },
@@ -92,10 +92,21 @@ export const getRoutes = async (req: AuthRequest, res: Response): Promise<void> 
         include: {
           driver: {
             include: {
-              user: { select: { id: true, name: true, email: true, phone: true } },
+              user: { select: { id: true, name: true, email: true, phone: true, status: true } },
+            },
+          },
+          trips: {
+            where: { status: 'ACTIVE' },
+            take: 1,
+            include: {
+              locations: {
+                orderBy: { timestamp: 'desc' },
+                take: 1,
+              },
             },
           },
         },
+        orderBy: { busNumber: 'asc' },
       },
       _count: { select: { buses: true, students: true } },
     },
@@ -110,8 +121,28 @@ export const getRoute = async (req: AuthRequest, res: Response): Promise<void> =
     where: { id },
     include: {
       stops: { orderBy: { sequence: 'asc' } },
-      buses: { select: { id: true, busNumber: true, status: true } },
-      students: { include: { user: { select: { name: true } }, assignedStop: true } },
+      buses: {
+        include: {
+          driver: {
+            include: {
+              user: { select: { id: true, name: true, email: true, phone: true, status: true } },
+            },
+          },
+          trips: {
+            where: { status: 'ACTIVE' },
+            take: 1,
+            include: {
+              locations: {
+                orderBy: { timestamp: 'desc' },
+                take: 1,
+              },
+            },
+          },
+        },
+        orderBy: { busNumber: 'asc' },
+      },
+      students: { include: { user: { select: { name: true, email: true } }, assignedStop: true } },
+      _count: { select: { buses: true, students: true } },
     },
   });
   if (!route) throw createError('Route not found', 404);
