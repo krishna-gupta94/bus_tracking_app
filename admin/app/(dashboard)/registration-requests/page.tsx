@@ -341,58 +341,130 @@ export default function RegistrationRequestsPage() {
                   {(!selected.collegeIdPath && !selected.busSlipPath) ? (
                     <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No documents uploaded for this request.</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                       {/* College ID Card */}
                       {selected.collegeIdPath && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                              College ID Card
+                        <div style={{ background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                🎓 College ID Card
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {selected.collegeIdName || 'college-id.pdf'} {selected.collegeIdSize ? `• ${formatBytes(selected.collegeIdSize)}` : ''}
+                                {selected.collegeIdType ? ` • ${selected.collegeIdType}` : ''}
+                              </div>
                             </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                              {selected.collegeIdName || 'college-id.pdf'} {selected.collegeIdSize ? `• ${formatBytes(selected.collegeIdSize)}` : ''}
-                              {selected.collegeIdType ? ` • ${selected.collegeIdType}` : ''}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                                onClick={() => loadDoc('college-id')}
+                                disabled={fetchingDoc === 'college-id'}
+                              >
+                                {fetchingDoc === 'college-id' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
+                                {docUrls['college-id'] ? 'Refresh Preview' : 'Preview Document'}
+                              </button>
+                              {docUrls['college-id'] && (
+                                <a
+                                  href={docUrls['college-id'].url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}
+                                  title="Open in new tab"
+                                >
+                                  <ExternalLink size={13} /> Full Screen
+                                </a>
+                              )}
                             </div>
                           </div>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
-                            onClick={() => loadDoc('college-id')}
-                            disabled={fetchingDoc === 'college-id'}
-                          >
-                            {fetchingDoc === 'college-id' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
-                            View / Preview
-                          </button>
+
+                          {/* Inline Preview for College ID */}
+                          {docUrls['college-id'] && (
+                            <div style={{ borderTop: '1px solid var(--border)', background: '#0f172a', padding: 12, textAlign: 'center' }}>
+                              {(docUrls['college-id'].fileType?.includes('image') ||
+                                /\.(jpe?g|png|webp|heic|gif)$/i.test(docUrls['college-id'].fileName || '')) ? (
+                                <img
+                                  src={docUrls['college-id'].url}
+                                  alt="College ID Preview"
+                                  style={{ maxHeight: 380, maxWidth: '100%', objectFit: 'contain', borderRadius: 6, margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+                                />
+                              ) : (
+                                <iframe
+                                  src={docUrls['college-id'].url}
+                                  title="College ID PDF"
+                                  style={{ width: '100%', height: 380, border: 'none', borderRadius: 6, backgroundColor: '#fff' }}
+                                />
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 
                       {/* Bus Slip / Fee Receipt */}
                       {selected.busSlipPath && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                              Bus Slip / Fee Receipt
+                        <div style={{ background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                🚌 Bus Slip / Fee Receipt
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {selected.busSlipName || 'bus-slip.pdf'} {selected.busSlipSize ? `• ${formatBytes(selected.busSlipSize)}` : ''}
+                                {selected.busSlipType ? ` • ${selected.busSlipType}` : ''}
+                              </div>
                             </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                              {selected.busSlipName || 'bus-slip.pdf'} {selected.busSlipSize ? `• ${formatBytes(selected.busSlipSize)}` : ''}
-                              {selected.busSlipType ? ` • ${selected.busSlipType}` : ''}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                                onClick={() => loadDoc('bus-slip')}
+                                disabled={fetchingDoc === 'bus-slip'}
+                              >
+                                {fetchingDoc === 'bus-slip' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
+                                {docUrls['bus-slip'] ? 'Refresh Preview' : 'Preview Document'}
+                              </button>
+                              {docUrls['bus-slip'] && (
+                                <a
+                                  href={docUrls['bus-slip'].url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}
+                                  title="Open in new tab"
+                                >
+                                  <ExternalLink size={13} /> Full Screen
+                                </a>
+                              )}
                             </div>
                           </div>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
-                            onClick={() => loadDoc('bus-slip')}
-                            disabled={fetchingDoc === 'bus-slip'}
-                          >
-                            {fetchingDoc === 'bus-slip' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
-                            View / Preview
-                          </button>
+
+                          {/* Inline Preview for Bus Slip */}
+                          {docUrls['bus-slip'] && (
+                            <div style={{ borderTop: '1px solid var(--border)', background: '#0f172a', padding: 12, textAlign: 'center' }}>
+                              {(docUrls['bus-slip'].fileType?.includes('image') ||
+                                /\.(jpe?g|png|webp|heic|gif)$/i.test(docUrls['bus-slip'].fileName || '')) ? (
+                                <img
+                                  src={docUrls['bus-slip'].url}
+                                  alt="Bus Slip Preview"
+                                  style={{ maxHeight: 380, maxWidth: '100%', objectFit: 'contain', borderRadius: 6, margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+                                />
+                              ) : (
+                                <iframe
+                                  src={docUrls['bus-slip'].url}
+                                  title="Bus Slip PDF"
+                                  style={{ width: '100%', height: 380, border: 'none', borderRadius: 6, backgroundColor: '#fff' }}
+                                />
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   )}
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>
-                    🔒 Document URLs are cryptographically signed and expire in 15 minutes.
+                    🔒 Document URLs are generated securely on-demand and valid for 15 minutes.
                   </p>
                 </div>
 
