@@ -1,197 +1,213 @@
-# 🚌 College Bus Tracking System
+# SmartBus / College Bus Tracking System
 
-A complete, production-style full-stack **College Bus Tracking System** built with **Node.js, Express, TypeScript, Socket.IO, Prisma ORM, SQLite, Next.js 14, and React Native (Expo SDK 57)**.
+## 1. Project Overview
+SmartBus is a comprehensive transit tracking and safety verification platform designed specifically for college and university bus fleets. 
+The main problem it solves is the lack of visibility into student transit—it ensures students know exactly where their bus is and when it will arrive, while giving the administration verifiable proof that specific students boarded specific buses safely.
 
----
+## 2. Key Features
+- **Student App**: Live tracking, ETA to assigned stop, boarding confirmation, SOS alerts.
+- **Driver App**: Background GPS telemetry broadcasting, trip management, SOS alerts.
+- **Admin Dashboard**: Live fleet map monitoring, conflict resolution, user/fleet management.
+- **Live Bus Tracking**: Real-time Socket.IO map updates.
+- **Route & Stop Management**: Assigned paths and sequenced stops.
+- **Intelligent ETA**: Arrival time predictions based on Haversine distance, speed, and historical metrics.
+- **SOS Emergency System**: Distress beacon with instant location sent to administrators.
+- **Student Boarding Detection**: Automated distance-based triggers prompting students to confirm boarding.
+- **Registration Requests & Document Upload**: In-app ID/Bus slip upload to Supabase storage.
+- **Role-based Access**: Hardened separation between ADMIN, STUDENT, and DRIVER roles.
+- **Background GPS**: Persistent driver location dispatch using Expo TaskManager.
 
-## 🌟 Key Features
+## 3. System Architecture
 
-1. **Admin Web Dashboard (Next.js 14)**
-   - Real-time Leaflet map displaying live positions of all active buses
-   - Full CRUD for **Students, Drivers, Buses, Routes, and Stops**
-   - Interactive Stop sequence management with coordinate specification
-   - System Overview stats dashboard & trip history logs
-   - Notification management and system status indicators
-
-2. **Driver Mobile App (React Native & Expo)**
-   - Start / End trip flow with assignment validation
-   - Real phone GPS location tracking via `expo-location`
-   - High-accuracy position watcher broadcasting live coordinates every 8-10 seconds
-   - Real-time WebSocket broadcasting (`Socket.IO`) to students and admin
-   - Location permission & GPS status error handling
-
-3. **Student Mobile App (React Native & Expo)**
-   - Real-time live bus tracking on interactive `react-native-maps` Map
-   - Route polyline & stop sequence visualizer with highlighted student stop
-   - Live location timestamp & real-time connection badge
-   - In-app notification inbox & driver trip alerts
-   - Role-based navigation guards via Expo Router v4
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technologies |
-|---|---|
-| **Backend API** | Node.js 20, Express, TypeScript, Socket.IO, `jose` (JWT), bcryptjs, Zod |
-| **Database & ORM** | SQLite (Better-SQLite3 driver), Prisma ORM v7 |
-| **Admin Dashboard** | Next.js 14 (App Router), TypeScript, `react-leaflet`, OpenStreetMap, Axios |
-| **Mobile Application** | React Native, Expo SDK 57, TypeScript, Expo Router v4, `react-native-maps`, `expo-location` |
-
----
-
-## 📁 Project Structure
-
+```text
+  [ Driver Phone ] (Expo TaskManager)
+         │  (GPS Coordinates via POST / Socket)
+         ▼
+  [ Backend API ] ──────────────► [ PostgreSQL / Supabase ]
+         │                                (Prisma ORM)
+         ▼
+  [ Socket.IO Realtime Engine ]
+         │
+    ┌────┴─────────┐
+    ▼              ▼
+[ Admin Panel ]  [ Student Phone ]
+ (Live Map)       (Live Map & ETA)
 ```
-college-bus-tracker/
-├── backend/                  # Express + TypeScript + Socket.IO API
-│   ├── prisma/
-│   │   ├── schema.prisma     # SQLite Prisma database models
-│   │   ├── seed.ts           # Development database seed script
-│   │   └── dev.db            # SQLite database file
-│   ├── src/
-│   │   ├── config/           # Environment variables
-│   │   ├── controllers/      # Auth, Student, Driver, Bus, Route, Trip, Location controllers
-│   │   ├── middleware/       # JWT auth & RBAC middleware
-│   │   ├── prisma/           # Singleton Prisma client with better-sqlite3 adapter
-│   │   ├── routes/           # REST API routes
-│   │   └── index.ts          # Express + Socket.IO server entry
-│   └── package.json
-│
-├── admin/                    # Next.js 14 Admin Dashboard
-│   ├── app/
-│   │   ├── (dashboard)/      # Protected dashboard routes (Students, Drivers, Buses, Routes, Live Tracking, Trips)
-│   │   ├── login/            # Admin login page
-│   │   ├── globals.css       # Dark-mode design system & utility classes
-│   │   └── layout.tsx        # Root layout with AuthProvider & Toast notifications
-│   ├── components/
-│   │   └── LiveMap.tsx       # Leaflet live map component with Socket.IO updates
-│   ├── lib/                  # Axios API client & AuthContext
-│   └── package.json
-│
-└── mobile/                   # React Native Expo Mobile App (Student & Driver)
-    ├── app/
-    │   ├── (auth)/login.tsx  # Mobile login screen (Preset buttons & IP configurator)
-    │   ├── (student)/        # Student tabs (Home, Live Track, Route, Notifications, Profile)
-    │   ├── (driver)/         # Driver console (Start/End trip, live GPS broadcaster)
-    │   └── _layout.tsx       # Expo Router v4 root layout with role protection
-    ├── src/
-    │   ├── context/          # AuthContext & storage
-    │   └── services/         # Axios API client
-    └── app.json              # Expo permissions configuration
-```
+The architecture heavily relies on the backend serving as the source of truth, managing all database interactions, verifying JWTs, and acting as the exclusive emitter of real-time data via Socket.IO to connected React Native (Student) and Next.js (Admin) clients.
 
----
+## 4. Technology Stack
+- **Node.js & Express (v4.22.2)**: Core backend server.
+- **Prisma (v7.9.1)**: Type-safe database ORM.
+- **PostgreSQL / Supabase**: Relational database and file storage.
+- **Socket.IO (v4.8.3)**: Real-time WebSocket communication engine.
+- **React Native / Expo (SDK 57)**: Cross-platform mobile framework (Student/Driver).
+- **Next.js (v16.3.0)**: React web framework (Admin Panel).
+- **MapTiler / Leaflet**: Map rendering and visualization.
+- **Jose / bcryptjs**: JWT authentication and password hashing.
+- **Expo TaskManager & Location**: Driver background GPS access.
 
-## 🔑 Development Login Credentials
+## 5. User Roles
 
-All users below are pre-created during database seeding (`npm run seed`):
+### Student
+- **Permissions**: Can only access their own profile, assigned route, assigned bus, and their own boarding events.
+- **Features**: View live bus, receive ETAs, confirm boarding, trigger SOS.
 
-| Role | Email | Password | Assigned Details |
-|---|---|---|---|
-| **System Admin** | `admin@college.edu` | `Admin@123` | Full dashboard access |
-| **Driver 1** | `driver1@college.edu` | `Driver@123` | Assigned to Bus **B001** (Route 1) |
-| **Driver 2** | `driver2@college.edu` | `Driver@123` | Assigned to Bus **B002** (Route 2) |
-| **Student 1** | `student1@college.edu` | `Student@123` | Assigned Bus **B001**, Stop 2 (Railway Station) |
-| **Student 2** | `student2@college.edu` | `Student@123` | Assigned Bus **B001**, Stop 3 (Civil Lines) |
+### Driver
+- **Permissions**: Can only broadcast location for their assigned bus and manage trips assigned to them.
+- **Features**: Start/End trips, broadcast live GPS location in background, trigger SOS.
 
-> ⚠️ **Note:** Password hashing uses `bcryptjs`. Change credentials before deploying to production.
+### Admin
+- **Permissions**: Full read/write access to all system data.
+- **Features**: Manage users, buses, routes, stops. Monitor all active trips on a live map, resolve boarding conflicts, and approve registration documents.
 
----
+## 6. Core Workflows
 
-## 🚀 Quick Start Guide (Windows PowerShell)
+- **Student/Driver/Admin Login**: POST to `/auth/login` → Validates bcrypt hash → Returns JWT with role → Client stores JWT → API/Socket calls send Bearer token.
+- **Driver Start Trip**: Driver App taps "Start" → POST `/api/trips/start` → Backend creates active `Trip` → App initializes Expo TaskManager for background GPS.
+- **Driver Live GPS**: TaskManager wakes up in background → Gets Coordinates → Socket `location:send` (or POST `/api/locations`) → Backend saves to DB → Broadcasts to route room.
+- **Student Live Bus Tracking**: Student App connects to Socket.IO with JWT → Backend validates assigned route → Student joins `route:{id}` → Receives only their bus coordinates.
+- **ETA**: App polls ETA endpoint → Backend calculates baseline (distance/speed) + historical metrics + XGBoost simulation → Returns formatted ETA.
+- **SOS**: User triggers SOS → App sends coords → Backend logs in DB + Broadcasts `sos:trigger` to Admin room → Admin sees emergency map popup.
+- **Boarding Detection**: Bus departs stop (distance > 250m) → Backend generates `PENDING_CONFIRMATION` event → Pushes to Student → Student taps YES/NO → Backend updates DB to `BOARDED_CONFIRMED` or `CONFLICT`.
+- **Registration Approval**: Student submits form + docs → Stored in Supabase bucket → Admin reviews → Admin approves → Backend creates User + Student records.
 
-### Prerequisites
-- **Node.js 20+** installed
-- **npm** installed
-- Expo Go app on mobile phone (optional, if testing on physical device)
+## 7. Database Architecture
 
----
+- **User**: Base identity (`email`, `passwordHash`, `role`).
+- **Student**: Links to `User`. Has `assignedRouteId`, `assignedBusId`, `assignedStopId`.
+- **Driver**: Links to `User`. Assigned to a `Bus`.
+- **Bus**: Links to `Driver` and `Route`.
+- **Route**: Has many `Stops` and `Buses`.
+- **Stop**: Ordered path coordinates (`latitude`, `longitude`, `sequence`).
+- **Trip**: Driver session (`startTime`, `endTime`, `status`).
+- **BusLocation**: Raw telemetry (`latitude`, `longitude`, `speed`).
+- **BoardingEvent**: Tracking state (`status`, `confidence`, `studentResponse`).
+- **RegistrationRequest**: Pending user signups and document references.
 
-### 1. Backend Server Setup
+## 8. API Overview
 
-```powershell
-cd college-bus-tracker/backend
+| Method | Endpoint | Role | Purpose |
+|--------|----------|------|---------|
+| POST | `/api/auth/login` | Any | Verifies credentials, returns JWT. |
+| POST | `/api/registration` | Any | Submits registration request. |
+| GET | `/api/buses/eta/my-stop` | STUDENT | Calculates intelligent ETA for assigned stop. |
+| POST | `/api/trips/start` | DRIVER | Opens a new trip session. |
+| POST | `/api/locations` | DRIVER | Records GPS dispatch. |
+| POST | `/api/boarding/confirm` | STUDENT | Submits YES/NO to boarding prompt. |
+| GET | `/api/students` | ADMIN | Lists all students. |
+
+## 9. Realtime Architecture
+- **Engine**: Socket.IO.
+- **Authentication**: JWT token passed in handshake `auth: { token }`. Backend verifies using `jose` before allowing room joins.
+- **Rooms**: `route:{id}`, `bus:{id}`, `admin`, `user:{id}`.
+- **Events**: 
+  - `join:route`, `join:bus`, `join:admin`: Client subscription requests.
+  - `location:send`: Driver sending GPS.
+  - `bus:location_update`: Backend broadcasting location to students.
+  - `boarding:admin_update`: Backend pushing boarding state changes to Admin dashboard.
+  - `sos:trigger`: Emergency distress beacon.
+
+## 10. GPS Architecture
+
+### Driver GPS
+`Driver device (Expo TaskManager) → GPS hardware → Backend API/Socket → PostgreSQL Database (bus_locations) → Realtime Broadcast → Student/Admin Map`
+The driver app runs a background task using Expo Location that requests continuous GPS updates, allowing tracking to persist even when the phone is locked.
+
+### Student GPS
+Student location is primarily used in the foreground to center the map. Continuous background location for students is intentionally avoided to save battery and maintain privacy.
+
+## 11. Boarding Detection
+The system automates boarding tracking:
+1. **Bus Approach**: Distance < 100m.
+2. **Bus Departure**: Distance > 250m.
+3. Backend creates `PENDING_CONFIRMATION` events for assigned students.
+4. Prompt shown to Student.
+5. **YES**: Status updates to `BOARDED_CONFIRMED`.
+6. **NO**: Background verification compares student/bus GPS. If they match despite the "NO", status becomes `CONFLICT`.
+7. **Admin Resolution**: Admins manually resolve conflicts.
+
+## 12. SOS System
+A universal emergency system for Drivers and Students. Pressing SOS immediately grabs the device's current GPS location and emits an `sos:trigger` event. The backend logs a permanent `Notification` in the database and broadcasts the alert to the `admin` Socket room, causing an immediate takeover of the Admin dashboard with the emergency location.
+
+## 13. Registration & Document System
+Students register via the mobile app, uploading College ID and Bus Slips. These files are securely uploaded to a private Supabase Storage bucket. A `RegistrationRequest` is created. Administrators view these requests in the Admin Panel, download the documents via signed URLs/Service Role, and manually click "Approve" to activate the account.
+
+## 14. Security
+- **JWT**: Custom stateless JSON Web Tokens handling role-based access control.
+- **Role-based Authorization**: Backend middleware (`req.user.role`) strictly restricts endpoint access.
+- **Password Security**: Hashed via `bcryptjs`.
+- **Supabase RLS**: Deny-all Row Level Security is enabled on all application tables. The database is immune to direct public PostgREST scraping.
+- **Prisma Bypass**: Prisma connects as the `postgres` superuser, safely bypassing RLS for backend operations.
+- **Storage Security**: Private buckets require backend service role access to view files.
+- **Socket.IO Authentication**: Ownership-based checks prevent Students from joining Socket rooms for routes they are not assigned to.
+
+## 15. Advantages
+- **Strict Role Separation**: Excellent security boundary at the Socket and API levels.
+- **Automated Boarding**: Reduces manual driver workload by using GPS fences.
+- **Deny-All RLS**: Protects raw data natively at the database level.
+- **Cross-Platform**: React Native/Expo covers both iOS and Android natively.
+
+## 16. Limitations
+- **GPS / Mobile OS**: Background location tasks on Android/iOS can be aggressively killed by device battery optimizers, pausing driver tracking.
+- **ETA**: Highly computationally expensive on the backend and subject to physical traffic anomalies.
+- **Offline Reliability**: If a driver loses 4G connection, GPS packets are dropped rather than queued locally.
+
+## 17. Performance & Scalability
+The system is highly performant for a standard college fleet. However, the ETA calculation fetches full route and trip data synchronously. If scaled to thousands of students simultaneously polling for ETAs, it will become a bottleneck. Future scaling requires migrating ETA calculations to a background worker and broadcasting results via Socket.IO.
+
+## 18. Important Files
+
+| File | Purpose | Importance |
+|------|---------|------------|
+| `backend/src/index.ts` | Socket.IO routing, token verification, auth logic. | CRITICAL |
+| `backend/prisma/schema.prisma` | PostgreSQL database schema and relations. | CRITICAL |
+| `backend/src/services/boardingDetectionService.ts` | Core automated boarding logic and state machine. | CRITICAL |
+| `mobile/src/services/driverLocationTask.ts` | Driver background GPS tracking implementation. | HIGH |
+| `backend/src/services/etaService.ts` | Intelligent arrival time prediction math. | HIGH |
+
+## 19. Development Setup
+
+**1. Backend**
+```bash
+cd backend
 npm install
-npx prisma migrate dev --name init
-npm run seed
+npx prisma generate
+npx prisma migrate dev
 npm run dev
 ```
 
-The backend server runs on **`http://localhost:5000`** with WebSocket support on **`ws://localhost:5000`**.
+**2. Mobile App**
+```bash
+cd mobile
+npm install
+npm start
+# or npm run android / npm run ios
+```
 
----
-
-### 2. Admin Dashboard Setup
-
-In a new terminal window:
-
-```powershell
-cd college-bus-tracker/admin
+**3. Admin Panel**
+```bash
+cd admin
 npm install
 npm run dev
 ```
 
-Open your browser at **`http://localhost:3000`** and log in with:
-- **Email:** `admin@college.edu`
-- **Password:** `Admin@123`
+## 20. Environment Variables
 
----
-
-### 3. Mobile App Setup (Expo Go)
-
-In a new terminal window:
-
-```powershell
-cd college-bus-tracker/mobile
-npm install
-npx expo start
+**Backend (`backend/.env`)**
+```env
+DATABASE_URL=
+DIRECT_URL=
+JWT_SECRET=
+PORT=
 ```
 
-- Press `a` to open Android Emulator, or scan the QR code with **Expo Go** on your Android/iOS phone.
-- On physical devices, set the **Backend Server URL** in the mobile app login screen to your computer's local Wi-Fi IP (e.g. `http://192.168.1.10:5000/api`).
-
----
-
-## 📡 Real-Time GPS Tracking Architecture
-
-```
-[ Driver Phone GPS ]
-        │ (watchPositionAsync - High accuracy)
-        ▼
-[ HTTP POST /api/locations/update + Socket.IO emit ]
-        │
-        ▼
-[ Backend (Express + Socket.IO) ] ── (Store location in SQLite)
-        │
-        ├─────────────────────────────┐
-        ▼                             ▼
-[ Socket.IO Room: bus:{busId} ]  [ Socket.IO Room: admin ]
-        │                             │
-        ▼                             ▼
-[ Student App Live Map ]      [ Admin Dashboard Live Map ]
-  (react-native-maps)            (react-leaflet)
+**Admin (`admin/.env.local`)**
+```env
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_SOCKET_URL=
 ```
 
----
-
-## ⚡ End-to-End Test Workflow
-
-1. Log into **Admin Dashboard** (`http://localhost:3000`) as `admin@college.edu`.
-2. Inspect the **Buses**, **Routes**, and **Drivers** tabs to see pre-configured assignments.
-3. Open the **Mobile App** (or emulator) and sign in as **Driver Demo** (`driver1@college.edu`).
-4. On the Driver Console, tap **START TRIP & BROADCAST GPS**. Allow location permissions.
-5. Notice real-time coordinate updates & counter incrementing on the driver screen.
-6. Open the **Admin Dashboard** -> **Live Tracking** page. You will see Bus **B001** active on the Leaflet map with coordinates updating live!
-7. Open another instance of the **Mobile App** (or sign in as `student1@college.edu`). Open the **Live Track** tab.
-8. You will see Bus **B001** marker moving dynamically on the student map without refreshing!
-9. On the Driver Console, tap **END TRIP**. The map status immediately updates to COMPLETED across student and admin interfaces.
-
----
-
-## 🔒 Security & RBAC Features
-
-- **JWT Authentication:** Stateless JWT tokens generated using `jose` with expiration checks.
-- **Role-Based Access Control:** Strict authorization middleware (`requireRole('ADMIN')`) guarding writing operations on Students, Drivers, Buses, and Routes.
-- **Triple-Guard Trip Flow:** Drivers can only operate buses assigned to them by admin, and cannot create duplicate active trips.
-- **Input Validation:** Zod schema validation applied to all API payloads.
+**Mobile (`mobile/.env`)**
+```env
+EXPO_PUBLIC_API_URL=
+```
