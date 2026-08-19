@@ -1,173 +1,224 @@
-# SmartBus / College Bus Tracking System
+# SmartBus — College Bus Tracking & Transit Management System
+
+SmartBus is a comprehensive transit tracking and student safety verification platform designed specifically for college and university bus fleets. It provides real-time bus location tracking, intelligent ETA predictions, automated student boarding verification, and emergency SOS alerting across mobile and web interfaces.
+
+---
 
 ## 1. Project Overview
-SmartBus is a comprehensive transit tracking and safety verification platform designed specifically for college and university bus fleets. 
-The main problem it solves is the lack of visibility into student transit—it ensures students know exactly where their bus is and when it will arrive, while giving the administration verifiable proof that specific students boarded specific buses safely.
+
+- **Primary Goal**: Provide full operational visibility into campus transit, ensuring student safety and timely transit management.
+- **Key Beneficiaries**:
+  - **Students**: Gain reliable arrival estimates, route information, and immediate safety features.
+  - **Drivers**: Simple trip management and automated location dispatch.
+  - **Administrators**: Centralized live fleet visibility, route monitoring, and safety compliance.
+
+---
 
 ## 2. Key Features
-- **Student App**: Live tracking, ETA to assigned stop, boarding confirmation, SOS alerts.
-- **Driver App**: Background GPS telemetry broadcasting, trip management, SOS alerts.
-- **Admin Dashboard**: Live fleet map monitoring, conflict resolution, user/fleet management.
-- **Live Bus Tracking**: Real-time Socket.IO map updates.
-- **Route & Stop Management**: Assigned paths and sequenced stops.
-- **Intelligent ETA**: Arrival time predictions based on Haversine distance, speed, and historical metrics.
-- **SOS Emergency System**: Distress beacon with instant location sent to administrators.
-- **Student Boarding Detection**: Automated distance-based triggers prompting students to confirm boarding.
-- **Registration Requests & Document Upload**: In-app ID/Bus slip upload to Supabase storage.
-- **Role-based Access**: Hardened separation between ADMIN, STUDENT, and DRIVER roles.
-- **Background GPS**: Persistent driver location dispatch using Expo TaskManager.
+
+- **Live Bus Tracking**: Real-time map-based visualization of active buses on assigned routes.
+- **Intelligent ETA Predictions**: Dynamic arrival time calculations based on vehicle distance, movement metrics, and route patterns.
+- **Automated Boarding Verification**: Intelligent verification workflow combining route context, vehicle location, and student confirmations.
+- **Emergency SOS Distress System**: Instant emergency alerting with location information for students and drivers.
+- **Route & Stop Management**: Flexible management of campus transit routes, ordered stops, and bus assignments.
+- **Student Registration & Verification**: Streamlined student onboarding with private document submission and administrator approval.
+- **Role-Based Access Control**: Tailored workflows and data isolation for Students, Drivers, and Administrators.
+- **Background Location Telemetry**: Continuous location dispatch for active trips across supported mobile devices.
+
+---
 
 ## 3. System Architecture
 
 ```text
-  [ Driver Phone ] (Expo TaskManager)
-         │  (GPS Coordinates via POST / Socket)
-         ▼
-  [ Backend API ] ──────────────► [ PostgreSQL / Supabase ]
-         │                                (Prisma ORM)
-         ▼
-  [ Socket.IO Realtime Engine ]
-         │
-    ┌────┴─────────┐
-    ▼              ▼
-[ Admin Panel ]  [ Student Phone ]
- (Live Map)       (Live Map & ETA)
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│   Student App   │       │   Driver App    │       │   Admin Panel   │
+│  (React Native) │       │  (React Native) │       │    (Next.js)    │
+└────────┬────────┘       └────────┬────────┘       └────────┬────────┘
+         │                         │                         │
+         │ (HTTP / Realtime)       │ (Telemetry / HTTP)      │ (Management / Realtime)
+         ▼                         ▼                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Backend API Server                          │
+│                      (Node.js / Express API)                        │
+└───────────────────┬─────────────────────────────┬───────────────────┘
+                    │                             │
+                    │ (Database ORM)              │ (Realtime Broadcasts)
+                    ▼                             ▼
+        ┌───────────────────────┐     ┌───────────────────────┐
+        │  PostgreSQL Database  │     │   Socket.IO Engine    │
+        │  (Relational Storage) │     │ (Live Event Dispatch) │
+        └───────────────────────┘     └───────────────────────┘
 ```
-The architecture heavily relies on the backend serving as the source of truth, managing all database interactions, verifying JWTs, and acting as the exclusive emitter of real-time data via Socket.IO to connected React Native (Student) and Next.js (Admin) clients.
+
+The system operates around a central API and orchestration layer:
+1. **Client Layer**: Dedicated interfaces for Students, Drivers, and Fleet Administrators.
+2. **Application Layer**: Centralized business logic, state machines for boarding and trips, ETA processing, and authenticated WebSocket dispatch.
+3. **Data Layer**: Persistent relational data management with server-side access controls and protected asset storage.
+
+---
 
 ## 4. Technology Stack
-- **Node.js & Express (v4.22.2)**: Core backend server.
-- **Prisma (v7.9.1)**: Type-safe database ORM.
-- **PostgreSQL / Supabase**: Relational database and file storage.
-- **Socket.IO (v4.8.3)**: Real-time WebSocket communication engine.
-- **React Native / Expo (SDK 57)**: Cross-platform mobile framework (Student/Driver).
-- **Next.js (v16.3.0)**: React web framework (Admin Panel).
-- **MapTiler / Leaflet**: Map rendering and visualization.
-- **Jose / bcryptjs**: JWT authentication and password hashing.
-- **Expo TaskManager & Location**: Driver background GPS access.
 
-## 5. User Roles
+- **Backend**: Node.js, Express, TypeScript
+- **Database & ORM**: PostgreSQL, Prisma ORM
+- **Realtime Engine**: Socket.IO
+- **Mobile Application**: React Native, Expo (SDK 57)
+- **Web Administration Panel**: Next.js (App Router), React, Tailwind CSS
+- **Mapping & Visualization**: MapTiler, Leaflet
+- **Authentication**: JWT-based session tokens, secure password hashing
+- **File & Asset Storage**: Cloud object storage
+
+---
+
+## 5. User Roles & Permissions
 
 ### Student
-- **Permissions**: Can only access their own profile, assigned route, assigned bus, and their own boarding events.
-- **Features**: View live bus, receive ETAs, confirm boarding, trigger SOS.
+- View assigned route, stops, and assigned bus.
+- Monitor real-time vehicle movement and arrival estimates for their stop.
+- Receive boarding prompts and confirm or decline boarding status.
+- Send emergency SOS distress alerts.
 
 ### Driver
-- **Permissions**: Can only broadcast location for their assigned bus and manage trips assigned to them.
-- **Features**: Start/End trips, broadcast live GPS location in background, trigger SOS.
+- View assigned bus and scheduled route.
+- Start and complete active trips.
+- Broadcast live location telemetry during active transit.
+- Trigger emergency SOS alerts.
 
-### Admin
-- **Permissions**: Full read/write access to all system data.
-- **Features**: Manage users, buses, routes, stops. Monitor all active trips on a live map, resolve boarding conflicts, and approve registration documents.
+### Administrator
+- Comprehensive fleet oversight: routes, stops, buses, and driver assignments.
+- Real-time fleet monitoring and live transit map.
+- Review and resolve boarding status discrepancies.
+- Manage and review student registration requests and submitted verification documents.
+- Real-time monitoring and acknowledgement of emergency SOS alerts.
+
+---
 
 ## 6. Core Workflows
 
-- **Student/Driver/Admin Login**: POST to `/auth/login` → Validates bcrypt hash → Returns JWT with role → Client stores JWT → API/Socket calls send Bearer token.
-- **Driver Start Trip**: Driver App taps "Start" → POST `/api/trips/start` → Backend creates active `Trip` → App initializes Expo TaskManager for background GPS.
-- **Driver Live GPS**: TaskManager wakes up in background → Gets Coordinates → Socket `location:send` (or POST `/api/locations`) → Backend saves to DB → Broadcasts to route room.
-- **Student Live Bus Tracking**: Student App connects to Socket.IO with JWT → Backend validates assigned route → Student joins `route:{id}` → Receives only their bus coordinates.
-- **ETA**: App polls ETA endpoint → Backend calculates baseline (distance/speed) + historical metrics + XGBoost simulation → Returns formatted ETA.
-- **SOS**: User triggers SOS → App sends coords → Backend logs in DB + Broadcasts `sos:trigger` to Admin room → Admin sees emergency map popup.
-- **Boarding Detection**: Bus departs stop (distance > 250m) → Backend generates `PENDING_CONFIRMATION` event → Pushes to Student → Student taps YES/NO → Backend updates DB to `BOARDED_CONFIRMED` or `CONFLICT`.
-- **Registration Approval**: Student submits form + docs → Stored in Supabase bucket → Admin reviews → Admin approves → Backend creates User + Student records.
+- **Authentication**: Users authenticate with credentials and receive a cryptographically signed token that determines authorized resources.
+- **Trip Lifecycle**: Drivers initiate an active trip, starting background location dispatch. Upon trip completion, telemetry broadcast stops and vehicle status updates.
+- **Live Location Tracking**: Telemetry from active trips is processed by the server and broadcast to authorized clients subscribed to that route.
+- **ETA Estimation**: Real-time vehicle positions are evaluated against route stops and historical transit metrics to calculate estimated arrival times.
+- **Boarding Verification**: When a vehicle services a stop, the system initiates verification for assigned passengers, recording confirmation responses and identifying any discrepancies for administrative review.
+- **Emergency SOS Alerting**: Triggering SOS dispatches device location coordinates immediately to the administrative dashboard for rapid response.
+- **Registration & Approval**: New student registrations and verification documents are placed in review until verified by an administrator.
 
-## 7. Database Architecture
+---
 
-- **User**: Base identity (`email`, `passwordHash`, `role`).
-- **Student**: Links to `User`. Has `assignedRouteId`, `assignedBusId`, `assignedStopId`.
-- **Driver**: Links to `User`. Assigned to a `Bus`.
-- **Bus**: Links to `Driver` and `Route`.
-- **Route**: Has many `Stops` and `Buses`.
-- **Stop**: Ordered path coordinates (`latitude`, `longitude`, `sequence`).
-- **Trip**: Driver session (`startTime`, `endTime`, `status`).
-- **BusLocation**: Raw telemetry (`latitude`, `longitude`, `speed`).
-- **BoardingEvent**: Tracking state (`status`, `confidence`, `studentResponse`).
-- **RegistrationRequest**: Pending user signups and document references.
+## 7. Database Overview
 
-## 8. API Overview
+The relational schema organizes transit entities into clearly defined domain models:
 
-| Method | Endpoint | Role | Purpose |
-|--------|----------|------|---------|
-| POST | `/api/auth/login` | Any | Verifies credentials, returns JWT. |
-| POST | `/api/registration` | Any | Submits registration request. |
-| GET | `/api/buses/eta/my-stop` | STUDENT | Calculates intelligent ETA for assigned stop. |
-| POST | `/api/trips/start` | DRIVER | Opens a new trip session. |
-| POST | `/api/locations` | DRIVER | Records GPS dispatch. |
-| POST | `/api/boarding/confirm` | STUDENT | Submits YES/NO to boarding prompt. |
-| GET | `/api/students` | ADMIN | Lists all students. |
+- **Users & Accounts**: Central identity, credential management, and role definitions.
+- **Students & Drivers**: Extended profiles managing route assignments and driver fleet links.
+- **Buses & Fleet**: Vehicle records, capacities, registration identifiers, and operational statuses.
+- **Routes & Stops**: Path definitions, descriptions, geographic stop coordinates, and ordered transit sequences.
+- **Trips & Telemetry**: Active transit sessions and recorded vehicle location metrics.
+- **Boarding Events**: Records of passenger boarding status, confirmations, and administrative resolutions.
+- **Emergency Alerts**: SOS records capturing emergency telemetry and resolution timestamps.
+- **Registration Requests**: Staged onboarding submissions and document references awaiting review.
+
+---
+
+## 8. API Architecture
+
+The backend exposes a structured RESTful API organized into functional modules:
+
+| Domain | Purpose | Access Control |
+|---|---|---|
+| **Authentication** | User login, session verification, and credential updates | Public / Authenticated |
+| **Registration** | Student onboarding submissions and status checks | Public / Authenticated |
+| **Fleet & Routes** | Route, stop, and bus management and discovery | Role-based (Student, Driver, Admin) |
+| **Trips & Telemetry**| Starting/ending trips and recording vehicle location | Driver / Server |
+| **ETA & Tracking** | Stop-level arrival time calculations and vehicle lookups | Authenticated Students / Admins |
+| **Boarding** | Boarding confirmations, status tracking, and conflict reviews | Students / Admins |
+| **SOS Alerts** | Emergency distress beacon creation and resolution | Authenticated / Admins |
+| **Administration** | User management, document reviews, and system oversight | Administrators |
+
+---
 
 ## 9. Realtime Architecture
-- **Engine**: Socket.IO.
-- **Authentication**: JWT token passed in handshake `auth: { token }`. Backend verifies using `jose` before allowing room joins.
-- **Rooms**: `route:{id}`, `bus:{id}`, `admin`, `user:{id}`.
-- **Events**: 
-  - `join:route`, `join:bus`, `join:admin`: Client subscription requests.
-  - `location:send`: Driver sending GPS.
-  - `bus:location_update`: Backend broadcasting location to students.
-  - `boarding:admin_update`: Backend pushing boarding state changes to Admin dashboard.
-  - `sos:trigger`: Emergency distress beacon.
 
-## 10. GPS Architecture
+Real-time synchronization is powered by Socket.IO:
+- **Authenticated Connections**: Real-time sessions are authenticated on connection to verify identity and permissions.
+- **Scoped Subscriptions**: Clients subscribe only to relevant data streams (such as assigned routes or administrative channels), ensuring data privacy and reducing network bandwidth.
+- **Event Distribution**: Real-time updates cover live vehicle coordinates, boarding status changes, notifications, and instant emergency alerts.
 
-### Driver GPS
-`Driver device (Expo TaskManager) → GPS hardware → Backend API/Socket → PostgreSQL Database (bus_locations) → Realtime Broadcast → Student/Admin Map`
-The driver app runs a background task using Expo Location that requests continuous GPS updates, allowing tracking to persist even when the phone is locked.
+---
 
-### Student GPS
-Student location is primarily used in the foreground to center the map. Continuous background location for students is intentionally avoided to save battery and maintain privacy.
+## 10. GPS & Location System
 
-## 11. Boarding Detection
-The system automates boarding tracking:
-1. **Bus Approach**: Distance < 100m.
-2. **Bus Departure**: Distance > 250m.
-3. Backend creates `PENDING_CONFIRMATION` events for assigned students.
-4. Prompt shown to Student.
-5. **YES**: Status updates to `BOARDED_CONFIRMED`.
-6. **NO**: Background verification compares student/bus GPS. If they match despite the "NO", status becomes `CONFLICT`.
-7. **Admin Resolution**: Admins manually resolve conflicts.
+- **Driver Telemetry**: Driver devices broadcast location, heading, and speed during active trips using platform background location services to maintain continuous updates.
+- **Student Positioning**: Student location is utilized primarily in the foreground for map centering and local boarding verification assistance.
+- **Resilience**: Designed to handle transient network interruptions, resuming telemetry synchronization as connectivity permits.
 
-## 12. SOS System
-A universal emergency system for Drivers and Students. Pressing SOS immediately grabs the device's current GPS location and emits an `sos:trigger` event. The backend logs a permanent `Notification` in the database and broadcasts the alert to the `admin` Socket room, causing an immediate takeover of the Admin dashboard with the emergency location.
+---
 
-## 13. Registration & Document System
-Students register via the mobile app, uploading College ID and Bus Slips. These files are securely uploaded to a private Supabase Storage bucket. A `RegistrationRequest` is created. Administrators view these requests in the Admin Panel, download the documents via signed URLs/Service Role, and manually click "Approve" to activate the account.
+## 11. Boarding Verification System
 
-## 14. Security
-- **JWT**: Custom stateless JSON Web Tokens handling role-based access control.
-- **Role-based Authorization**: Backend middleware (`req.user.role`) strictly restricts endpoint access.
-- **Password Security**: Hashed via `bcryptjs`.
-- **Supabase RLS**: Deny-all Row Level Security is enabled on all application tables. The database is immune to direct public PostgREST scraping.
-- **Prisma Bypass**: Prisma connects as the `postgres` superuser, safely bypassing RLS for backend operations.
-- **Storage Security**: Private buckets require backend service role access to view files.
-- **Socket.IO Authentication**: Ownership-based checks prevent Students from joining Socket rooms for routes they are not assigned to.
+The boarding verification engine automates passenger accountability:
+- **Proximity Detection**: Detects vehicle arrival and departure relative to sequenced route stops.
+- **Passenger Confirmation**: Generates verification requests for students assigned to the serviced stop.
+- **Status Lifecycle**: Tracks states from initial verification through confirmed boarding, declined confirmations, and resolved outcomes.
+- **Administrative Oversight**: Highlights discrepancies or unverified passengers on the administrative dashboard for manual review and resolution.
+
+---
+
+## 12. Emergency SOS System
+
+- Available to both students and drivers directly from the mobile interface.
+- Transmits immediate location coordinates and transit context upon activation.
+- Triggers high-priority administrative alerts with visual map markers for rapid response coordination.
+- Maintains a permanent historical log of all emergency events and resolution records.
+
+---
+
+## 13. Registration & Document Security
+
+- Prospective students submit registration details along with required identification documents.
+- Uploaded files are stored in protected private cloud storage, isolated from public access.
+- Access to uploaded identification documents is restricted strictly to authorized administrative review workflows.
+- Accounts are activated only upon administrator verification and approval.
+
+---
+
+## 14. Security Architecture
+
+SmartBus implements layered security across all application tiers:
+- **Role-Based Access Control (RBAC)**: Strict server-side validation ensures users access only authorized resources.
+- **Database Row-Level Security**: Direct public client access to database tables is disabled; all queries flow through authenticated server APIs.
+- **Token-Based Authentication**: Stateless cryptographically signed tokens manage session identity.
+- **Credential Protection**: Passwords are saved exclusively using industry-standard cryptographic hashing.
+- **Protected File Storage**: Sensitive student documentation is kept in private storage accessible only via authenticated server processes.
+- **Authenticated WebSockets**: Real-time communication channels require verified authentication before allowing room subscriptions.
+
+---
 
 ## 15. Advantages
-- **Strict Role Separation**: Excellent security boundary at the Socket and API levels.
-- **Automated Boarding**: Reduces manual driver workload by using GPS fences.
-- **Deny-All RLS**: Protects raw data natively at the database level.
-- **Cross-Platform**: React Native/Expo covers both iOS and Android natively.
 
-## 16. Limitations
-- **GPS / Mobile OS**: Background location tasks on Android/iOS can be aggressively killed by device battery optimizers, pausing driver tracking.
-- **ETA**: Highly computationally expensive on the backend and subject to physical traffic anomalies.
-- **Offline Reliability**: If a driver loses 4G connection, GPS packets are dropped rather than queued locally.
+- **Integrated Ecosystem**: Unified backend serving mobile applications (Student & Driver) and a web management portal.
+- **Low Hardware Barrier**: Uses standard mobile devices for telemetry without requiring dedicated onboard GPS units.
+- **Automated Verification**: Reduces administrative overhead through intelligent boarding detection workflows.
+- **Strong Role Isolation**: Comprehensive separation between operational fleet management and passenger features.
 
-## 17. Performance & Scalability
-The system is highly performant for a standard college fleet. However, the ETA calculation fetches full route and trip data synchronously. If scaled to thousands of students simultaneously polling for ETAs, it will become a bottleneck. Future scaling requires migrating ETA calculations to a background worker and broadcasting results via Socket.IO.
+---
 
-## 18. Important Files
+## 16. Technical Considerations & Limitations
 
-| File | Purpose | Importance |
-|------|---------|------------|
-| `backend/src/index.ts` | Socket.IO routing, token verification, auth logic. | CRITICAL |
-| `backend/prisma/schema.prisma` | PostgreSQL database schema and relations. | CRITICAL |
-| `backend/src/services/boardingDetectionService.ts` | Core automated boarding logic and state machine. | CRITICAL |
-| `mobile/src/services/driverLocationTask.ts` | Driver background GPS tracking implementation. | HIGH |
-| `backend/src/services/etaService.ts` | Intelligent arrival time prediction math. | HIGH |
+- **Mobile Background Execution**: Background location tracking is subject to mobile OS battery optimization policies across different device manufacturers.
+- **Cellular Network Dependency**: Real-time tracking accuracy depends on active mobile data connectivity along transit corridors.
+- **Urban GPS Variations**: Standard GPS accuracy tolerances may vary in dense urban or obstructed environments.
 
-## 19. Development Setup
+---
 
-**1. Backend**
+## 17. Development Setup
+
+### Prerequisites
+- Node.js (v18+ recommended)
+- PostgreSQL database
+- Expo CLI
+
+### 1. Backend Setup
 ```bash
 cd backend
 npm install
@@ -176,7 +227,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-**2. Mobile App**
+### 2. Mobile App Setup
 ```bash
 cd mobile
 npm install
@@ -184,16 +235,18 @@ npm start
 # or npm run android / npm run ios
 ```
 
-**3. Admin Panel**
+### 3. Admin Dashboard Setup
 ```bash
 cd admin
 npm install
 npm run dev
 ```
 
-## 20. Environment Variables
+---
 
-**Backend (`backend/.env`)**
+## 18. Environment Variables Template
+
+### Backend (`backend/.env`)
 ```env
 DATABASE_URL=
 DIRECT_URL=
@@ -201,13 +254,13 @@ JWT_SECRET=
 PORT=
 ```
 
-**Admin (`admin/.env.local`)**
+### Admin Panel (`admin/.env.local`)
 ```env
 NEXT_PUBLIC_API_URL=
 NEXT_PUBLIC_SOCKET_URL=
 ```
 
-**Mobile (`mobile/.env`)**
+### Mobile App (`mobile/.env`)
 ```env
 EXPO_PUBLIC_API_URL=
 ```
