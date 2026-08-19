@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import dynamic from 'next/dynamic';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -59,6 +60,7 @@ export interface SOSAlertItem {
 }
 
 export default function SOSAlertsPage() {
+  const { token } = useAuth();
   const [alerts, setAlerts] = useState<SOSAlertItem[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<SOSAlertItem | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'NEW' | 'ACKNOWLEDGED' | 'RESOLVED'>('ALL');
@@ -83,9 +85,15 @@ export default function SOSAlertsPage() {
     loadAlerts();
 
     // Real-time Socket.IO connection
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      auth: { token: token ?? '' },
+    });
     socketRef.current = socket;
-    socket.emit('join:admin');
+
+    socket.on('connect', () => {
+      socket.emit('join:admin');
+    });
 
     socket.on('sos:trigger', (newSOS: any) => {
       toast.error(`🚨 EMERGENCY: ${newSOS.userRole} ${newSOS.userName} triggered an SOS!`, {

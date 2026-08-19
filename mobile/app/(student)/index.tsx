@@ -30,7 +30,7 @@ import { startStudentBoardingVerification, stopStudentBoardingVerification } fro
 import { io, Socket } from 'socket.io-client';
 
 export default function StudentHomeScreen() {
-  const { user, refreshUserData, serverUrl } = useAuth();
+  const { user, refreshUserData, serverUrl, token } = useAuth();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -87,7 +87,10 @@ export default function StudentHomeScreen() {
     loadData();
 
     const socketBase = serverUrl.replace('/api', '');
-    const socket = io(socketBase, { transports: ['websocket', 'polling'] });
+    const socket = io(socketBase, {
+      transports: ['websocket', 'polling'],
+      auth: { token: token ?? '' },
+    });
     socketRef.current = socket;
 
     if (route?.id) {

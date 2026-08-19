@@ -29,7 +29,7 @@ import {
 } from '../../src/services/busService';
 
 export default function StudentTrackingScreen() {
-  const { user, serverUrl, refreshUserData } = useAuth();
+  const { user, serverUrl, refreshUserData, token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [routeDiscovery, setRouteDiscovery] = useState<RouteDiscoveryResult | null>(null);
   const [selectedBusIndex, setSelectedBusIndex] = useState(0);
@@ -94,7 +94,10 @@ export default function StudentTrackingScreen() {
     loadRouteData();
 
     const socketBase = serverUrl.replace('/api', '');
-    const socket = io(socketBase, { transports: ['websocket', 'polling'] });
+    const socket = io(socketBase, {
+      transports: ['websocket', 'polling'],
+      auth: { token: token ?? '' },
+    });
     socketRef.current = socket;
 
     if (route?.id) {

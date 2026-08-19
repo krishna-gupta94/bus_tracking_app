@@ -8,6 +8,7 @@ import {
   Phone, Users, Activity
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useAuth } from '@/lib/auth-context';
 
 interface RouteOption {
   id: string;
@@ -67,6 +68,7 @@ interface SimulationReport {
 }
 
 export default function RouteMonitoringPage() {
+  const { token } = useAuth();
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [activeBuses, setActiveBuses] = useState<ActiveBus[]>([]);
@@ -156,7 +158,10 @@ export default function RouteMonitoringPage() {
   // 3. Socket.IO live updates listener
   useEffect(() => {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      auth: { token: token ?? '' },
+    });
 
     socket.on('connect', () => {
       socket.emit('join:admin');

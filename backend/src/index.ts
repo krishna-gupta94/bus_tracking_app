@@ -10,6 +10,7 @@ import { setSocketServer as setNotificationSocket } from './controllers/notifica
 import { setSOSSocketServer } from './controllers/sosController';
 import { busLocationProvider } from './services/busLocationProvider';
 import { boardingDetectionService } from './services/boardingDetectionService';
+import { jwtVerify } from 'jose';
 
 const server = http.createServer(app);
 
@@ -30,35 +31,161 @@ setSOSSocketServer(io);
 busLocationProvider.setSocketServer(io);
 boardingDetectionService.setSocketServer(io);
 
+// ── Socket JWT verification helper ──────────────────────────────────────────
+const socketSecret = new TextEncoder().encode(config.jwtSecret);
+
+/**
+ * Verify a JWT token from the socket handshake auth.
+ * Returns { userId, role } on success, or null on failure.
+ * Also confirms the user account is ACTIVE in the database.
+ */
+async function verifySocketToken(
+  token: string | undefined
+): Promise<{ userId: string; role: string } | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, socketSecret);
+    if (!payload.userId || !payload.role) return null;
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId as string },
+      select: { id: true, role: true, status: true },
+    });
+    if (!user || user.status === 'INACTIVE') return null;
+    return { userId: user.id, role: user.role };
+  } catch {
+    return null;
+  }
+}
+
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`);
 
-  // Student/Admin joins a route room to receive all bus updates on that route
-  socket.on('join:route', ({ routeId }: { routeId: string }) => {
-    socket.join(`route:${routeId}`);
-    console.log(`[Socket] ${socket.id} joined route:${routeId}`);
+  // JWT is sent in socket handshake auth object:
+  //   io(url, { auth: { token: '<jwt>' } })
+  const handshakeToken = socket.handshake.auth?.token as string | undefined;
+
+  // ── join:route — ownership-based ─────────────────────────────────────────
+  // STUDENT  → only their assignedRouteId
+  // DRIVER   → only their bus.routeId
+  // ADMIN    → any route
+  socket.on('join:route', async ({ routeId }: { routeId: string }) => {
+    if (!routeId) return;
+    const auth = await verifySocketToken(handshakeToken);
+    if (!auth) {
+      console.warn(`[Socket] join:route DENIED (no/invalid token): ${socket.id}`);
+      return;
+    }
+
+    if (auth.role === 'ADMIN') {
+      socket.join(`route:${routeId}`);
+      console.log(`[Socket] ADMIN ${socket.id} joined route:${routeId}`);
+      return;
+    }
+
+    if (auth.role === 'STUDENT') {
+      const student = await prisma.student.findUnique({
+        where: { userId: auth.userId },
+        select: { assignedRouteId: true },
+      });
+      if (student?.assignedRouteId === routeId) {
+        socket.join(`route:${routeId}`);
+        console.log(`[Socket] STUDENT ${socket.id} joined route:${routeId}`);
+      } else {
+        console.warn(`[Socket] STUDENT join:route DENIED — not assigned: ${routeId} (${socket.id})`);
+      }
+      return;
+    }
+
+    if (auth.role === 'DRIVER') {
+      const driver = await prisma.driver.findUnique({
+        where: { userId: auth.userId },
+        include: { bus: { select: { routeId: true } } },
+      });
+      if (driver?.bus?.routeId === routeId) {
+        socket.join(`route:${routeId}`);
+        console.log(`[Socket] DRIVER ${socket.id} joined route:${routeId}`);
+      } else {
+        console.warn(`[Socket] DRIVER join:route DENIED — not their bus route: ${routeId} (${socket.id})`);
+      }
+    }
   });
 
-  // Student/Admin joins a bus room to receive live updates
-  socket.on('join:bus', ({ busId }: { busId: string }) => {
-    socket.join(`bus:${busId}`);
-    console.log(`[Socket] ${socket.id} joined bus:${busId}`);
+  // ── join:bus — ownership-based ───────────────────────────────────────────
+  // STUDENT  → only their assignedBusId
+  // DRIVER   → only their assigned bus
+  // ADMIN    → any bus
+  socket.on('join:bus', async ({ busId }: { busId: string }) => {
+    if (!busId) return;
+    const auth = await verifySocketToken(handshakeToken);
+    if (!auth) {
+      console.warn(`[Socket] join:bus DENIED (no/invalid token): ${socket.id}`);
+      return;
+    }
+
+    if (auth.role === 'ADMIN') {
+      socket.join(`bus:${busId}`);
+      console.log(`[Socket] ADMIN ${socket.id} joined bus:${busId}`);
+      return;
+    }
+
+    if (auth.role === 'STUDENT') {
+      const student = await prisma.student.findUnique({
+        where: { userId: auth.userId },
+        select: { assignedBusId: true },
+      });
+      if (student?.assignedBusId === busId) {
+        socket.join(`bus:${busId}`);
+        console.log(`[Socket] STUDENT ${socket.id} joined bus:${busId}`);
+      } else {
+        console.warn(`[Socket] STUDENT join:bus DENIED — not assigned: ${busId} (${socket.id})`);
+      }
+      return;
+    }
+
+    if (auth.role === 'DRIVER') {
+      const driver = await prisma.driver.findUnique({
+        where: { userId: auth.userId },
+        include: { bus: { select: { id: true } } },
+      });
+      if (driver?.bus?.id === busId) {
+        socket.join(`bus:${busId}`);
+        console.log(`[Socket] DRIVER ${socket.id} joined bus:${busId}`);
+      } else {
+        console.warn(`[Socket] DRIVER join:bus DENIED — not their bus: ${busId} (${socket.id})`);
+      }
+    }
   });
 
-  // Admin joins admin room for all broadcasts
-  socket.on('join:admin', () => {
+  // ── join:admin — ADMIN role only ─────────────────────────────────────────
+  socket.on('join:admin', async () => {
+    const auth = await verifySocketToken(handshakeToken);
+    if (!auth || auth.role !== 'ADMIN') {
+      console.warn(`[Socket] join:admin DENIED: ${socket.id}`);
+      return;
+    }
     socket.join('admin');
-    console.log(`[Socket] ${socket.id} joined admin room`);
+    console.log(`[Socket] ADMIN ${socket.id} joined admin room`);
   });
 
-  // User joins their personal notification room
-  socket.on('join:user', ({ userId }: { userId: string }) => {
+  // ── join:user — token owner only ─────────────────────────────────────────
+  socket.on('join:user', async ({ userId }: { userId: string }) => {
+    if (!userId) return;
+    const auth = await verifySocketToken(handshakeToken);
+    if (!auth || auth.userId !== userId) {
+      console.warn(`[Socket] join:user DENIED — userId mismatch: ${socket.id}`);
+      return;
+    }
     socket.join(`user:${userId}`);
     console.log(`[Socket] ${socket.id} joined user:${userId}`);
   });
 
-  // Emergency SOS trigger event
+  // ── sos:trigger — authenticated users only ───────────────────────────────
   socket.on('sos:trigger', async (sosData: any) => {
+    const auth = await verifySocketToken(handshakeToken);
+    if (!auth) {
+      console.warn(`[Socket] sos:trigger DENIED (unauthenticated): ${socket.id}`);
+      return;
+    }
     console.log('[Socket] 🚨 SOS Distress Beacon received:', sosData);
     io.to('admin').emit('sos:trigger', sosData);
 
@@ -80,7 +207,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Driver / Tracker sends location update directly via socket
+  // ── location:send — DRIVER only, must own the bus ────────────────────────
   socket.on('location:send', async (data: {
     latitude: number;
     longitude: number;
@@ -92,11 +219,27 @@ io.on('connection', (socket) => {
     source?: 'DRIVER_PHONE' | 'PHYSICAL_TRACKER';
   }) => {
     try {
+      const auth = await verifySocketToken(handshakeToken);
+      if (!auth || auth.role !== 'DRIVER') {
+        console.warn(`[Socket] location:send DENIED (not DRIVER): ${socket.id}`);
+        return;
+      }
+
       const { latitude, longitude, tripId, busId, speed, heading, accuracy, source } = data;
       if (
         typeof latitude !== 'number' || typeof longitude !== 'number' ||
         !busId
       ) return;
+
+      // Verify this driver actually owns the bus they're sending location for
+      const driver = await prisma.driver.findUnique({
+        where: { userId: auth.userId },
+        include: { bus: { select: { id: true } } },
+      });
+      if (driver?.bus?.id !== busId) {
+        console.warn(`[Socket] location:send DENIED — driver does not own bus ${busId}: ${socket.id}`);
+        return;
+      }
 
       await busLocationProvider.recordLocation({
         busId,
