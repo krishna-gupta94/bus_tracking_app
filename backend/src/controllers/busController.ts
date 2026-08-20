@@ -219,26 +219,44 @@ export const updateBus = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const deleteBus = async (req: AuthRequest, res: Response): Promise<void> => {
   const id = req.params.id as string;
-  const bus = await prisma.bus.findUnique({ where: { id } });
+  const bus = await prisma.bus.findUnique({ 
+    where: { id },
+    include: {
+      _count: {
+        select: {
+          trips: true,
+          boardingEvents: true,
+          registrationRequests: true,
+        }
+      }
+    }
+  });
+
   if (!bus) throw createError('Bus not found', 404);
 
   const activeTrip = await prisma.trip.findFirst({ where: { busId: id, status: 'ACTIVE' } });
-  if (activeTrip) throw createError('Cannot delete bus with an active trip. Please end the trip first.', 400);
-
-  await prisma.$transaction(async (tx) => {
-    // 1. Delete bus location history
-    await tx.busLocation.deleteMany({
-      where: { busId: id },
+  if (activeTrip) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: 'Cannot delete bus with an active trip. Please end the trip first.'
     });
+    return;
+  }
 
-    // 2. Delete trip history for this bus
-    await tx.trip.deleteMany({
-      where: { busId: id },
+  const hasHistory = bus._count.trips > 0 || bus._count.boardingEvents > 0 || bus._count.registrationRequests > 0;
+
+  if (hasHistory) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: "This bus cannot be permanently deleted because it is linked to existing trips, boarding events, or registration records. Please deactivate or archive the bus instead."
     });
+    return;
+  }
 
-    // 3. Delete the bus
-    await tx.bus.delete({ where: { id } });
-  });
+  // Safe to delete if no history
+  await prisma.bus.delete({ where: { id } });
 
   res.json({ success: true, message: 'Bus deleted successfully' });
 };

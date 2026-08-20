@@ -448,3 +448,48 @@ export const rejectRequest = async (req: AuthRequest, res: Response): Promise<vo
   res.json({ success: true, message: 'Registration request rejected.' });
 };
 
+// ─── Delete Registration Request (Admin) ─────────────────────────────────────
+
+export const deleteRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+
+  const regReq = await prisma.registrationRequest.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      collegeIdPath: true,
+      busSlipPath: true,
+      approvedStudentId: true,
+    }
+  });
+
+  if (!regReq) throw createError('Registration request not found', 404);
+
+  // Requirement: The Admin must NOT be able to accidentally delete an already approved student's actual Student record.
+  // Actually, deleting an APPROVED request is allowed if we don't cascade to Student, but to be safe and clean, we shouldn't delete requests that are already linked unless we just delete the request record.
+  // The requirements state: "Deletion must only affect the selected registration request and files belonging to that request."
+  
+  // Safe file cleanup: delete only the files associated with this request
+  const pathsToDelete: string[] = [];
+  if (regReq.collegeIdPath) pathsToDelete.push(regReq.collegeIdPath);
+  if (regReq.busSlipPath) pathsToDelete.push(regReq.busSlipPath);
+
+  if (pathsToDelete.length > 0) {
+    try {
+      const { deleteRegistrationDocs } = await import('../services/documentService');
+      await deleteRegistrationDocs(pathsToDelete);
+    } catch (error) {
+      console.error('[Registration] File deletion failed:', error);
+      throw createError('Unable to delete registration request because the associated files could not be removed.', 500);
+    }
+  }
+
+  // Delete the registration request
+  await prisma.registrationRequest.delete({
+    where: { id }
+  });
+
+  res.json({ success: true, message: 'Registration request deleted successfully.' });
+};
+

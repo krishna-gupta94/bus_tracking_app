@@ -7,6 +7,7 @@ import {
   getDocumentUrl,
   approveRequest,
   rejectRequest,
+  deleteRequest,
 } from '../controllers/registrationController';
 import { authenticate, requireRole } from '../middleware/auth';
 
@@ -36,6 +37,10 @@ router.post('/requests/:id/approve',
 router.post('/requests/:id/reject',
   authenticate, requireRole('ADMIN'),
   rejectRequest
+);
+router.delete('/requests/:id',
+  authenticate, requireRole('ADMIN'),
+  deleteRequest
 );
 
 export default router;

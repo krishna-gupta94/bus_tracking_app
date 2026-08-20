@@ -385,9 +385,41 @@ export const updateStudent = async (req: AuthRequest, res: Response): Promise<vo
 
 export const deleteStudent = async (req: AuthRequest, res: Response): Promise<void> => {
   const id = req.params.id as string;
-  const student = await prisma.student.findUnique({ where: { id } });
+  const student = await prisma.student.findUnique({ 
+    where: { id },
+    include: {
+      user: {
+        include: {
+          _count: {
+            select: { sosAlerts: true }
+          }
+        }
+      },
+      _count: {
+        select: { boardingEvents: true }
+      },
+      registrationRequest: true
+    }
+  });
+
   if (!student) throw createError('Student not found', 404);
+
+  const hasHistory = 
+    student._count.boardingEvents > 0 || 
+    (student.user && student.user._count.sosAlerts > 0) ||
+    student.registrationRequest !== null;
+
+  if (hasHistory) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: "This student cannot be permanently deleted because they are linked to existing boarding events, SOS alerts, or registration records. Please deactivate the student's account instead."
+    });
+    return;
+  }
+
+  // Safe to delete if no history
   await prisma.user.delete({ where: { id: student.userId } });
-  res.json({ success: true, message: 'Student deleted' });
+  res.json({ success: true, message: 'Student deleted successfully' });
 };
 

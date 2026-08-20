@@ -172,41 +172,54 @@ export const updateRoute = async (req: AuthRequest, res: Response): Promise<void
 
 export const deleteRoute = async (req: AuthRequest, res: Response): Promise<void> => {
   const id = req.params.id as string;
-  const route = await prisma.route.findUnique({ where: { id } });
+  const route = await prisma.route.findUnique({ 
+    where: { id },
+    include: {
+      _count: {
+        select: {
+          trips: true,
+          students: true,
+          buses: true,
+          historicalMetrics: true,
+          boardingEvents: true,
+          registrationRequests: true,
+        }
+      }
+    }
+  });
+
   if (!route) throw createError('Route not found', 404);
 
   const activeTrip = await prisma.trip.findFirst({ where: { routeId: id, status: 'ACTIVE' } });
-  if (activeTrip) throw createError('Cannot delete route with an active trip. Please end the trip first.', 400);
+  if (activeTrip) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: 'Cannot delete route with an active trip. Please end the trip first.'
+    });
+    return;
+  }
 
+  const hasHistory = 
+    route._count.trips > 0 || 
+    route._count.students > 0 || 
+    route._count.boardingEvents > 0 || 
+    route._count.registrationRequests > 0 ||
+    route._count.historicalMetrics > 0 ||
+    route._count.buses > 0;
+
+  if (hasHistory) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: "This route cannot be permanently deleted because it is linked to existing students, stops, trips, or historical records. Please deactivate or archive it instead."
+    });
+    return;
+  }
+
+  // Safe to delete if no history
   await prisma.$transaction(async (tx) => {
-    // 1. Unassign students from this route and its stops
-    await tx.student.updateMany({
-      where: { assignedRouteId: id },
-      data: { assignedRouteId: null, assignedStopId: null },
-    });
-
-    // 2. Unassign buses from this route
-    await tx.bus.updateMany({
-      where: { routeId: id },
-      data: { routeId: null },
-    });
-
-    // 3. Delete bus locations from trips on this route
-    await tx.busLocation.deleteMany({
-      where: { trip: { routeId: id } },
-    });
-
-    // 4. Delete trips on this route
-    await tx.trip.deleteMany({
-      where: { routeId: id },
-    });
-
-    // 5. Delete stops (cascade is defined in schema, but tx ensures clean deletion)
-    await tx.stop.deleteMany({
-      where: { routeId: id },
-    });
-
-    // 6. Delete route
+    await tx.stop.deleteMany({ where: { routeId: id } });
     await tx.route.delete({ where: { id } });
   });
 
@@ -251,7 +264,7 @@ export const addStop = async (req: AuthRequest, res: Response): Promise<void> =>
 
   // Duplicate name check within same route
   const existingName = await prisma.stop.findFirst({
-    where: { routeId, name: { equals: parse.data.name } },
+    where: { routeId, name: { equals: parse.data.name, mode: 'insensitive' } },
   });
   if (existingName) {
     res.status(400).json({ success: false, message: `A stop named "${parse.data.name}" already exists on this route` });
@@ -283,7 +296,7 @@ export const updateStop = async (req: AuthRequest, res: Response): Promise<void>
   // Duplicate name check (exclude current stop)
   if (parse.data.name) {
     const existingName = await prisma.stop.findFirst({
-      where: { routeId: stop.routeId, name: { equals: parse.data.name }, id: { not: id } },
+      where: { routeId: stop.routeId, name: { equals: parse.data.name, mode: 'insensitive' }, id: { not: id } },
     });
     if (existingName) {
       res.status(400).json({ success: false, message: `A stop named "${parse.data.name}" already exists on this route` });

@@ -30,7 +30,18 @@ export const errorHandler = (
     console.error(`[Unique Constraint Violation] ${req.method} ${req.url} - Field(s): ${field}`);
     return res.status(400).json({
       success: false,
+      code: "UNIQUE_CONSTRAINT",
       message: `A duplicate entry was detected for ${field}. Value must be unique.`,
+    });
+  }
+
+  // Handle Prisma foreign key constraint violation (code P2003)
+  if (err?.code === 'P2003') {
+    console.error(`[Foreign Key Constraint] ${req.method} ${req.url} - ${err.message}`);
+    return res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: "This record cannot be permanently deleted because it is linked to other existing records. Please deactivate or archive it instead.",
     });
   }
 

@@ -106,3 +106,20 @@ export async function uploadToStorage(
   }
   return path;
 }
+
+/**
+ * Delete file(s) from Supabase Storage.
+ */
+export async function deleteFromStorage(
+  bucket: string,
+  paths: string[]
+): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await getSupabaseAdmin().storage
+    .from(bucket)
+    .remove(paths);
+
+  if (error) {
+    throw new Error(`Storage delete failed: ${error.message}`);
+  }
+}

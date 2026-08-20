@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   Search, RefreshCw, Eye, CheckCircle2, XCircle,
   Mail, Clock, FileText,
-  User, Bus, MapPin, Route as RouteIcon, ExternalLink, Download, AlertCircle,
+  User, Bus, MapPin, Route as RouteIcon, ExternalLink, Download, AlertCircle, Trash2,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -165,6 +165,21 @@ export default function RegistrationRequestsPage() {
     }
   };
 
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const handleDelete = async (req: RegRequest) => {
+    if (!window.confirm("Are you sure you want to delete this registration request?")) {
+      return;
+    }
+    try {
+      await api.delete(`/registration/requests/${req.id}`);
+      toast.success("Registration request deleted successfully.");
+      if (selected?.id === req.id) setSelected(null);
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Unable to delete registration request.");
+    }
+  };
+
   const isPending = selected && !['APPROVED', 'REJECTED'].includes(selected.status);
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -270,9 +285,14 @@ export default function RegistrationRequestsPage() {
                       {new Date(req.createdAt).toLocaleDateString()}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn-secondary btn-sm" title="Review" onClick={() => openDetail(req)}>
-                        <Eye size={14} /> Review
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary btn-sm" title="Review" onClick={() => openDetail(req)}>
+                          <Eye size={14} /> Review
+                        </button>
+                        <button className="btn btn-danger btn-sm" title="Delete" onClick={() => handleDelete(req)}>
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -288,9 +308,14 @@ export default function RegistrationRequestsPage() {
           <div className="modal-content" style={{ maxWidth: 720, width: '95%' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Registration Request Review</h2>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setSelected(null)}>
-                <XCircle size={18} />
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(selected)}>
+                  <Trash2 size={14} /> Delete
+                </button>
+                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setSelected(null)}>
+                  <XCircle size={18} />
+                </button>
+              </div>
             </div>
 
             {detailLoading ? (

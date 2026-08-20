@@ -63,3 +63,11 @@ export async function uploadRegistrationDoc(
 export async function getDocumentSignedUrl(storagePath: string): Promise<string> {
   return createSignedUrl(STUDENT_DOCS_BUCKET, storagePath, 900);
 }
+
+/**
+ * Delete registration documents from storage
+ */
+export async function deleteRegistrationDocs(paths: string[]): Promise<void> {
+  const { deleteFromStorage } = await import('./supabaseAdmin');
+  await deleteFromStorage(STUDENT_DOCS_BUCKET, paths);
+}

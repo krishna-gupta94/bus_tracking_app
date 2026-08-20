@@ -45,17 +45,17 @@ router.get('/public/:routeId/stops', async (req: Request, res: Response): Promis
 // ── Authenticated endpoints ───────────────────────────────────────────────────
 router.use(authenticate);
 
-router.get('/', getRoutes);
-router.get('/:id', getRoute);
-router.post('/', requireRole('ADMIN'), createRoute);
-router.put('/:id', requireRole('ADMIN'), updateRoute);
-router.delete('/:id', requireRole('ADMIN'), deleteRoute);
-
 // Stops — specific routes must come before /:id to avoid conflicts
 router.get('/:routeId/stops', getStopsByRoute);
 router.post('/:routeId/stops', requireRole('ADMIN'), addStop);
 router.put('/:routeId/stops/reorder', requireRole('ADMIN'), reorderStops);
 router.put('/stops/:id', requireRole('ADMIN'), updateStop);
 router.delete('/stops/:id', requireRole('ADMIN'), deleteStop);
+
+router.get('/', getRoutes);
+router.get('/:id', getRoute);
+router.post('/', requireRole('ADMIN'), createRoute);
+router.put('/:id', requireRole('ADMIN'), updateRoute);
+router.delete('/:id', requireRole('ADMIN'), deleteRoute);
 
 export default router;

@@ -22,6 +22,7 @@ const driverCreateSchema = z.object({
 
 const driverUpdateSchema = z.object({
   name: z.string().min(2).optional(),
+  email: z.string().email().optional(),
   phone: z.string().optional(),
   driverCode: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
@@ -167,12 +168,18 @@ export const updateDriver = async (req: AuthRequest, res: Response): Promise<voi
   const driver = await prisma.driver.findUnique({ where: { id }, include: { bus: true, user: true } });
   if (!driver) throw createError('Driver not found', 404);
 
-  const { name, phone, driverCode, status, assignedBusId } = parse.data;
+  const { name, email, phone, driverCode, status, assignedBusId } = parse.data;
 
   const cleanName = name !== undefined ? normalizeString(name) : undefined;
+  const cleanEmail = email !== undefined ? normalizeString(email).toLowerCase() : undefined;
   const cleanPhone = phone !== undefined ? (normalizeString(phone) || null) : undefined;
   const cleanDriverCode = driverCode !== undefined ? normalizeString(driverCode) : undefined;
   const cleanBusId = assignedBusId !== undefined ? (normalizeString(assignedBusId) || null) : undefined;
+
+  // Email uniqueness check on update
+  if (cleanEmail) {
+    await assertEmailUnique(cleanEmail, driver.userId);
+  }
 
   // Phone uniqueness check on update
   if (cleanPhone) {
@@ -196,11 +203,12 @@ export const updateDriver = async (req: AuthRequest, res: Response): Promise<voi
     }
   }
 
-  if (name !== undefined || cleanPhone !== undefined || status !== undefined) {
+  if (name !== undefined || cleanEmail !== undefined || cleanPhone !== undefined || status !== undefined) {
     await prisma.user.update({
       where: { id: driver.userId },
       data: {
         ...(name !== undefined && { name: name.trim() }),
+        ...(cleanEmail !== undefined && { email: cleanEmail }),
         ...(cleanPhone !== undefined && { phone: cleanPhone }),
         ...(status !== undefined && { status }),
       },
@@ -233,30 +241,51 @@ export const updateDriver = async (req: AuthRequest, res: Response): Promise<voi
 
 export const deleteDriver = async (req: AuthRequest, res: Response): Promise<void> => {
   const id = req.params.id as string;
-  const driver = await prisma.driver.findUnique({ where: { id } });
+  const driver = await prisma.driver.findUnique({ 
+    where: { id },
+    include: {
+      user: {
+        include: {
+          _count: {
+            select: { sosAlerts: true }
+          }
+        }
+      },
+      _count: {
+        select: { trips: true }
+      }
+    }
+  });
+
   if (!driver) throw createError('Driver not found', 404);
 
   const activeTrip = await prisma.trip.findFirst({ where: { driverId: id, status: 'ACTIVE' } });
-  if (activeTrip) throw createError('Cannot delete driver with an active trip. Please end the trip first.', 400);
+  if (activeTrip) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: 'Cannot delete driver with an active trip. Please end the trip first.'
+    });
+    return;
+  }
 
+  const hasHistory = driver._count.trips > 0 || (driver.user && driver.user._count.sosAlerts > 0);
+
+  if (hasHistory) {
+    res.status(400).json({
+      success: false,
+      code: "RESOURCE_IN_USE",
+      message: "This driver cannot be permanently deleted because they are linked to existing trips or SOS alerts. Please deactivate the driver's account instead."
+    });
+    return;
+  }
+
+  // Safe to delete if no history
   await prisma.$transaction(async (tx) => {
-    // 1. Unassign driver from any assigned bus
     await tx.bus.updateMany({
       where: { driverId: id },
       data: { driverId: null },
     });
-
-    // 2. Delete bus locations for driver's trips
-    await tx.busLocation.deleteMany({
-      where: { trip: { driverId: id } },
-    });
-
-    // 3. Delete driver's historical trips
-    await tx.trip.deleteMany({
-      where: { driverId: id },
-    });
-
-    // 4. Delete user record (which cascades to driver record)
     await tx.user.delete({ where: { id: driver.userId } });
   });
 
