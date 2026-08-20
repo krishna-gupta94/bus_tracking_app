@@ -43,7 +43,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setServerUrl(storedUrl);
         setCustomApiUrl(storedUrl);
       } else {
+        // No custom URL stored — persist DEFAULT_URL so the background location task
+        // (which cannot access Constants.expoConfig at runtime) always has a valid API URL.
         setCustomApiUrl(DEFAULT_URL);
+        await AsyncStorage.setItem('server_url', DEFAULT_URL);
       }
       const savedToken = await AsyncStorage.getItem('user_token');
       const savedUser = await AsyncStorage.getItem('user_data');
@@ -97,6 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await AsyncStorage.removeItem('user_token');
     await AsyncStorage.removeItem('user_data');
+    // Clear driver trip context: prevents the background GPS task from continuing to
+    // broadcast with stale credentials after logout (or after a different user logs in).
+    await Promise.all([
+      AsyncStorage.removeItem('driver_active_trip_id'),
+      AsyncStorage.removeItem('driver_active_bus_id'),
+      AsyncStorage.removeItem('driver_active_driver_id'),
+    ]).catch(() => {});
     setToken(null);
     setUser(null);
   };

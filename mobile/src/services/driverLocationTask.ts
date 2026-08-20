@@ -133,12 +133,17 @@ TaskManager.defineTask(DRIVER_LOCATION_TASK_NAME, async ({ data, error }: { data
     currentDiagnostics.lastGpsTimestamp = timestamp;
     currentDiagnostics.backgroundTaskStarted = 'RUNNING';
 
-    // 1. Check if there is an active trip registered
-    const [tripId, busId, token, customUrl] = await Promise.all([
+    // ── 1. Read ALL context from AsyncStorage (background task has no React state) ──
+    // IMPORTANT: Always read server_url from AsyncStorage. The module-level BASE_API_URL
+    // is computed at import time using Constants.expoConfig?.hostUri which is NOT available
+    // in background task runtime — it would default to http://10.0.2.2:5000/api (emulator IP)
+    // on a real physical device, causing all background uploads to hit the wrong server.
+    const [tripId, busId, token, userDataRaw, serverUrl] = await Promise.all([
       AsyncStorage.getItem('driver_active_trip_id'),
       AsyncStorage.getItem('driver_active_bus_id'),
-      AsyncStorage.getItem('user_token'),
-      AsyncStorage.getItem('server_url'),
+      AsyncStorage.getItem('user_token'),        // Same key used by AuthContext login()
+      AsyncStorage.getItem('user_data'),          // Used to verify token belongs to a DRIVER
+      AsyncStorage.getItem('server_url'),         // Persisted correct URL set by AuthContext
     ]);
 
     if (!tripId || !busId || !token) {
@@ -148,9 +153,53 @@ TaskManager.defineTask(DRIVER_LOCATION_TASK_NAME, async ({ data, error }: { data
       return;
     }
 
+    // ── 2. AUTHORIZATION PRE-CHECK: Verify the stored token belongs to a DRIVER ──
+    // Root cause of "Insufficient permissions" (HTTP 403):
+    // If a student logs in on the same device after a driver session, their token overwrites
+    // 'user_token' in AsyncStorage — but the driver trip IDs remain. The background task would
+    // then send a student's JWT to the DRIVER-only /locations/update endpoint, causing HTTP 403.
+    // We detect this early by checking the cached user_data role before making any network call.
+    if (userDataRaw) {
+      try {
+        const userData = JSON.parse(userDataRaw);
+        if (userData?.role && userData.role !== 'DRIVER') {
+          console.error(
+            `[DriverLocationTask] ⛔ AUTHORIZATION ERROR: Stored session belongs to role "${userData.role}", ` +
+            `not "DRIVER". This causes HTTP 403 from the backend. ` +
+            `Clearing stale trip context. Driver must log in again.`
+          );
+          currentDiagnostics.lastBackendUploadStatus = 'FAILED';
+          currentDiagnostics.lastBackendUploadError =
+            `[AUTHZ] Session role is "${userData.role}", expected "DRIVER". Log out and log in as a driver.`;
+          currentDiagnostics.tripStatus = 'INACTIVE';
+          emitDiagnostics();
+          // Clear stale trip context so the task doesn't keep retrying with wrong credentials
+          await Promise.all([
+            AsyncStorage.removeItem('driver_active_trip_id'),
+            AsyncStorage.removeItem('driver_active_bus_id'),
+            AsyncStorage.removeItem('driver_active_driver_id'),
+          ]).catch(() => {});
+          return;
+        }
+      } catch {
+        // Malformed user_data JSON — continue and let backend validate the token
+        console.warn('[DriverLocationTask] Could not parse user_data from AsyncStorage. Proceeding with backend validation.');
+      }
+    }
+
     currentDiagnostics.tripStatus = 'ACTIVE';
 
-    const apiUrl = customUrl || BASE_API_URL;
+    // ── 3. Resolve the correct API URL ──
+    // Always prefer the URL persisted in AsyncStorage by AuthContext.updateServerUrl().
+    // Never rely on the module-level BASE_API_URL in a background task — it is evaluated
+    // at import time when Constants.expoConfig is unavailable, defaulting to the emulator IP.
+    if (!serverUrl) {
+      // First run with no explicit server_url: persist BASE_API_URL so future background
+      // executions (after JS bundle hot-reloads) have a stable URL to fall back to.
+      AsyncStorage.setItem('server_url', BASE_API_URL).catch(() => {});
+    }
+    const apiUrl = serverUrl || BASE_API_URL;
+
 
     const payload: QueuedLocation = {
       latitude,
@@ -211,32 +260,80 @@ TaskManager.defineTask(DRIVER_LOCATION_TASK_NAME, async ({ data, error }: { data
 
     console.log(`[DriverLocationTask] 📍 Background GPS sent: lat=${latitude.toFixed(4)}, lon=${longitude.toFixed(4)}, speed=${speedKmh || 0}km/h (Total packets: ${currentDiagnostics.packetsSent})`);
   } catch (err: any) {
-    const errorMsg = err?.response?.data?.message || err?.message || 'Network upload failed';
-    console.warn('[DriverLocationTask] Network delivery failed, buffering coordinate:', errorMsg);
-    currentDiagnostics.lastBackendUploadStatus = 'FAILED';
-    currentDiagnostics.lastBackendUploadError = errorMsg;
-    emitDiagnostics();
+    const status: number | undefined = err?.response?.status;
+    const serverMessage: string = err?.response?.data?.message || '';
 
-    // Buffer failed coordinate in bounded queue (keep latest 10)
-    try {
-      const tripId = await AsyncStorage.getItem('driver_active_trip_id');
-      const busId = await AsyncStorage.getItem('driver_active_bus_id');
-      if (tripId && busId && data.locations && data.locations.length) {
-        const loc = data.locations[data.locations.length - 1];
-        offlineQueue.push({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-          tripId,
-          busId,
-          timestamp: new Date().toISOString(),
-        });
-        if (offlineQueue.length > 10) {
-          offlineQueue.shift();
+    if (status === 401) {
+      // Token is expired or invalid — do not buffer, stop broadcasting
+      const errorMsg = serverMessage || 'Session expired. Please log in again.';
+      console.error(`[DriverLocationTask] ⛔ AUTHENTICATION ERROR (HTTP 401): ${errorMsg}`);
+      currentDiagnostics.lastBackendUploadStatus = 'FAILED';
+      currentDiagnostics.lastBackendUploadError = `[AUTH 401] ${errorMsg}`;
+      currentDiagnostics.tripStatus = 'INACTIVE';
+      emitDiagnostics();
+      // Clear trip context to stop retrying with an invalid token
+      await Promise.all([
+        AsyncStorage.removeItem('driver_active_trip_id'),
+        AsyncStorage.removeItem('driver_active_bus_id'),
+        AsyncStorage.removeItem('driver_active_driver_id'),
+      ]).catch(() => {});
+      return;
+
+    } else if (status === 403) {
+      // Token is valid but user is not authorized as DRIVER (wrong role, deactivated account)
+      const errorMsg = serverMessage || 'Authorization denied. Driver role required.';
+      console.error(`[DriverLocationTask] ⛔ AUTHORIZATION ERROR (HTTP 403): ${errorMsg}`);
+      currentDiagnostics.lastBackendUploadStatus = 'FAILED';
+      currentDiagnostics.lastBackendUploadError = `[AUTHZ 403] ${errorMsg}`;
+      currentDiagnostics.tripStatus = 'INACTIVE';
+      emitDiagnostics();
+      // Clear trip context to stop retrying with wrong-role credentials
+      await Promise.all([
+        AsyncStorage.removeItem('driver_active_trip_id'),
+        AsyncStorage.removeItem('driver_active_bus_id'),
+        AsyncStorage.removeItem('driver_active_driver_id'),
+      ]).catch(() => {});
+      return;
+
+    } else if (status && status >= 400 && status < 500) {
+      // Other client errors (400 validation, 404 trip-not-found etc.) — log but do not buffer
+      const errorMsg = serverMessage || `Client error (HTTP ${status})`;
+      console.error(`[DriverLocationTask] ⛔ CLIENT ERROR (HTTP ${status}): ${errorMsg}`);
+      currentDiagnostics.lastBackendUploadStatus = 'FAILED';
+      currentDiagnostics.lastBackendUploadError = `[CLIENT ${status}] ${errorMsg}`;
+      emitDiagnostics();
+      return;
+
+    } else {
+      // Network error (no response / timeout) or 5xx server error — buffer for retry
+      const errorMsg = serverMessage || err?.message || 'Network upload failed';
+      console.warn(`[DriverLocationTask] ⚠️ NETWORK/SERVER ERROR${status ? ` (HTTP ${status})` : ''}: ${errorMsg} — buffering for retry`);
+      currentDiagnostics.lastBackendUploadStatus = 'FAILED';
+      currentDiagnostics.lastBackendUploadError = errorMsg;
+      emitDiagnostics();
+
+      // Buffer failed coordinate in bounded queue (keep latest 10)
+      try {
+        const currentTripId = await AsyncStorage.getItem('driver_active_trip_id');
+        const currentBusId = await AsyncStorage.getItem('driver_active_bus_id');
+        if (currentTripId && currentBusId && data.locations && data.locations.length) {
+          const loc = data.locations[data.locations.length - 1];
+          offlineQueue.push({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            tripId: currentTripId,
+            busId: currentBusId,
+            timestamp: new Date().toISOString(),
+          });
+          if (offlineQueue.length > 10) {
+            offlineQueue.shift();
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
   }
 });
+
 
 // ── PERMISSION & LIFECYCLE MANAGEMENT ──
 
