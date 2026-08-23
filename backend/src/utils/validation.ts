@@ -142,21 +142,16 @@ export async function assertDriverBusUnique(driverId: string, excludeBusId?: str
   });
   if (!driver) throw createError('Selected driver does not exist', 400);
 
-  const existing: any[] = excludeBusId
-    ? await prisma.$queryRaw`
-        SELECT id, busNumber FROM buses
-        WHERE driverId = ${cleanDriverId} AND id != ${excludeBusId}
-        LIMIT 1
-      `
-    : await prisma.$queryRaw`
-        SELECT id, busNumber FROM buses
-        WHERE driverId = ${cleanDriverId}
-        LIMIT 1
-      `;
+  const existing = await prisma.bus.findFirst({
+    where: {
+      driverId: cleanDriverId,
+      ...(excludeBusId && { id: { not: excludeBusId } })
+    }
+  });
 
-  if (existing.length > 0) {
+  if (existing) {
     throw createError(
-      `Driver "${driver.user.name}" is already assigned to Bus ${existing[0].busNumber}`,
+      `Driver is already assigned to Bus ${existing.busNumber}`,
       400
     );
   }
