@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,31 +6,40 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
 import { StatusBadge } from '../../src/components/StatusBadge';
+import { mobileApi } from '../../src/services/api';
 
 export default function StudentScheduleScreen() {
   const { user } = useAuth();
   const [selectedShift, setSelectedShift] = useState<'MORNING' | 'EVENING'>('MORNING');
+  const [liveRoute, setLiveRoute] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   const student = user?.student;
   const bus = student?.assignedBus;
   const route = student?.assignedRoute;
-  const stops = route?.stops ? [...route.stops].sort((a: any, b: any) => a.sequence - b.sequence) : [];
+  
+  useEffect(() => {
+    if (route?.id) {
+      setLoading(true);
+      mobileApi.get('/routes/' + route.id)
+        .then(res => setLiveRoute(res.data.data))
+        .catch(err => console.log('Error fetching route', err))
+        .finally(() => setLoading(false));
+    }
+  }, [route?.id]);
 
-  // Approximate schedule times based on stop sequence
-  const getExpectedTime = (sequence: number, shift: 'MORNING' | 'EVENING') => {
-    const baseHour = shift === 'MORNING' ? 7 : 16;
-    const baseMin = 15 + (sequence - 1) * 12;
-    const hour = baseHour + Math.floor(baseMin / 60);
-    const minute = baseMin % 60;
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour > 12 ? hour - 12 : hour;
-    return `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${period}`;
-  };
+  const fallbackStops = route?.stops ? [...route.stops].sort((a: any, b: any) => a.sequence - b.sequence) : [];
+  
+  const activeStops = selectedShift === 'MORNING' 
+    ? (liveRoute?.stops || fallbackStops)
+    : (liveRoute?.eveningStops || [...fallbackStops].reverse());
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -95,13 +104,15 @@ export default function StudentScheduleScreen() {
 
         {/* Timeline Header */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>ROUTE TIMELINE & TIMINGS ({stops.length})</Text>
+          <Text style={styles.sectionTitle}>ROUTE TIMELINE & TIMINGS ({activeStops.length})</Text>
           <Text style={styles.shiftTimeBadge}>
-            {selectedShift === 'MORNING' ? '07:15 AM - 08:30 AM' : '04:15 PM - 05:30 PM'}
+            {selectedShift === 'EVENING' && liveRoute?.eveningDepartureTime 
+              ? 'Departs at ' + liveRoute.eveningDepartureTime 
+              : 'Live Schedule'}
           </Text>
         </View>
 
-        {!route || stops.length === 0 ? (
+        {!route || activeStops.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="calendar-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No Schedule Available</Text>
@@ -109,11 +120,11 @@ export default function StudentScheduleScreen() {
           </View>
         ) : (
           <View style={styles.timeline}>
-            {stops.map((item: any, idx: number) => {
-              const isAssigned = student?.assignedStopId === item.id;
-              const isLast = idx === stops.length - 1;
+            {activeStops.map((item: any, idx: number) => {
+              const isAssigned = student?.assignedStopId === item.id || student?.assignedStopId + '_evening' === item.id;
+              const isLast = idx === activeStops.length - 1;
               const isFirst = idx === 0;
-              const timeString = getExpectedTime(item.sequence, selectedShift);
+              const timeString = item.eta || '--';
 
               return (
                 <View key={item.id} style={styles.timelineItem}>

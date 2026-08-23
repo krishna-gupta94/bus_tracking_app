@@ -1,0 +1,1 @@
+import { getRoutes } from './src/controllers/routeController'; import { Request, Response } from 'express'; async function run() { const req = { query: {} } as any; const res = { json: (data) => console.log(JSON.stringify(data, null, 2)) } as any; await getRoutes(req, res); } run();

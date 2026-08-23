@@ -53,7 +53,7 @@ export default function StudentTrackingScreen() {
 
   const student = user?.student;
   const route = student?.assignedRoute;
-  const assignedStop: Stop | null = student?.assignedStop || null;
+  const assignedStop: Stop | null = routeDiscovery?.studentStop || student?.assignedStop || null;
 
   const stops: Stop[] = useMemo(() => {
     const rawStops = routeDiscovery?.assignedRoute?.stops || route?.stops || [];

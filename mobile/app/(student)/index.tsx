@@ -58,7 +58,7 @@ export default function StudentHomeScreen() {
 
   const student = user?.student;
   const route = student?.assignedRoute;
-  const stop = student?.assignedStop;
+  const stop = routeDiscovery?.studentStop || student?.assignedStop;
 
   const loadData = useCallback(async () => {
     try {
