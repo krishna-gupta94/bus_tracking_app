@@ -68,7 +68,7 @@ export class BoardingConflictService {
         bus: true,
         trip: true,
         route: true,
-        stop: true
+        
       },
       orderBy: { createdAt: 'desc' }
     });

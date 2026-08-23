@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import toast from 'react-hot-toast';
-import { Bus, ShieldCheck, Lock, Mail, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { ShieldCheck, Lock, Mail, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@college.edu');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
@@ -31,10 +32,7 @@ export default function LoginPage() {
       <div className="login-bg" />
       <div className="login-card">
         <div className="login-logo">
-          <div className="login-bus-icon">
-            <Bus size={32} color="var(--accent)" />
-          </div>
-          <h1>Smart<span>Bus</span> Admin</h1>
+          <Image src="/logo.png" alt="College Bus Tracker" width={180} height={180} style={{ objectFit: 'contain' }} priority />
           <p>Campus Transit & Fleet Safety Console</p>
         </div>
 
@@ -49,12 +47,14 @@ export default function LoginPage() {
               />
               <input
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="username"
                 className="form-input"
                 style={{ paddingLeft: 38 }}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="admin@college.edu"
+                placeholder="Enter administrator email"
                 required
               />
             </div>
@@ -70,7 +70,9 @@ export default function LoginPage() {
               />
               <input
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 className="form-input"
                 style={{ paddingLeft: 38 }}
                 value={password}
@@ -99,26 +101,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        <div
-          style={{
-            marginTop: 24,
-            padding: 14,
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <ShieldCheck size={14} color="var(--accent)" />
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>
-              Development Demo Access
-            </p>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            admin@college.edu &bull; Admin@123
-          </p>
-        </div>
       </div>
     </div>
   );

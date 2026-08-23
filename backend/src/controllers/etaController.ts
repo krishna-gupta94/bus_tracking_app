@@ -8,12 +8,19 @@ import { etaService } from '../services/etaService';
  * GET /api/buses/:busId/eta?stopId=...
  * Calculates intelligent real-time ETA for a bus reaching a specified stop.
  */
+import { generateEveningStops } from '../utils/routeTiming';
+
 export const getBusETA = async (req: AuthRequest, res: Response): Promise<void> => {
   const busId = req.params.busId as string;
-  const { stopId } = req.query as { stopId?: string };
+  let { stopId } = req.query as { stopId?: string };
 
   if (!busId) {
     throw createError('Bus ID is required', 400);
+  }
+
+  const isEvening = new Date().getHours() >= 12;
+  if (isEvening && stopId && !stopId.endsWith('_evening')) {
+    stopId = stopId + '_evening';
   }
 
   // If user is a student, ensure they have access to this bus's route
@@ -33,10 +40,6 @@ export const getBusETA = async (req: AuthRequest, res: Response): Promise<void> 
   res.json({ success: true, data: etaResult });
 };
 
-/**
- * GET /api/buses/eta/my-stop or GET /api/buses/eta/my-route
- * Endpoint for authenticated students to directly fetch ALL active buses on their route with ETAs.
- */
 export const getMyStopETA = async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.user) {
     throw createError('Authentication required', 401);
@@ -46,7 +49,8 @@ export const getMyStopETA = async (req: AuthRequest, res: Response): Promise<voi
     where: { userId: req.user.id },
     include: {
       assignedRoute: {
-        include: { stops: { orderBy: { sequence: 'asc' } } },
+        // @ts-ignore
+        include: { stops: { orderBy: { sequence: 'asc' } }, description: true },
       },
       assignedStop: true,
     },
@@ -61,9 +65,28 @@ export const getMyStopETA = async (req: AuthRequest, res: Response): Promise<voi
     return;
   }
 
+  const isEvening = new Date().getHours() >= 12;
+  
+  if (isEvening && student.assignedRoute) {
+    // @ts-ignore
+    student.assignedRoute.stops = generateEveningStops(student.assignedRoute.stops, student.assignedRoute.description);
+    if (student.assignedStop) {
+      const match = student.assignedRoute.stops.find(s => s.id === student.assignedStopId + '_evening');
+      if (match) {
+        // @ts-ignore
+        student.assignedStop = match;
+      }
+    }
+  }
+
+  let targetStopId = student.assignedStopId || undefined;
+  if (isEvening && targetStopId) {
+    targetStopId = targetStopId + '_evening';
+  }
+
   const routeBusesEta = await etaService.getRouteBusesETA(
     student.assignedRouteId,
-    student.assignedStopId || undefined
+    targetStopId
   );
 
   res.json({

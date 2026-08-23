@@ -132,8 +132,8 @@ export default function StudentHomeScreen() {
             routeName: prev.routeName,
             targetStopId: prev.targetStopId,
             targetStopName: prev.targetStopName,
-            etaMinutes: 1,
-            etaSeconds: 60,
+            etaMinutes: 0,
+            etaSeconds: 0,
             etaFormatted: 'TRACKING',
             etaDisplayText: `Bus ${data.busNumber || ''} is live`,
             distanceMeters: 0,
@@ -534,6 +534,11 @@ export default function StudentHomeScreen() {
               <Text style={styles.stopNameText}>
                 {stop ? `${stop.sequence ? `Stop #${stop.sequence}: ` : ''}${stop.name}` : 'Unassigned Stop'}
               </Text>
+              {stop?.eta ? (
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  Scheduled ETA: <Text style={{ fontWeight: '700', color: colors.primary }}>{stop.eta}</Text>
+                </Text>
+              ) : null}
             </View>
             {userLocation && stop && (
               <Text style={styles.stopDistanceText}>
@@ -599,7 +604,13 @@ export default function StudentHomeScreen() {
                     <View style={styles.etaDisplayBadge}>
                       <Ionicons name="time" size={14} color={colors.primary} />
                       <Text style={styles.etaDisplayText}>
-                        {busItem.etaFormatted === 'ARRIVED' ? 'ARRIVED' : `${busItem.etaMinutes} MIN`}
+                        {(() => {
+                          if (busItem.status === 'GPS_UNAVAILABLE') return 'Location not available';
+                          if (busItem.status === 'OFFLINE') return 'Bus is offline';
+                          if (busItem.etaFormatted === 'ARRIVED') return 'ARRIVED';
+                          if (busItem.etaMinutes === undefined || busItem.etaMinutes === null || busItem.etaMinutes <= 0) return 'ETA unavailable';
+                          return `${busItem.etaMinutes} MIN`;
+                        })()}
                       </Text>
                     </View>
                   </View>

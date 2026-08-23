@@ -3,6 +3,7 @@ import { xgboostEngine, XGBoostTransitFeatures } from './xgboostEngine';
 import { routingService, RouteStop } from './routingService';
 import { gpsFilterService, RawGPSPoint } from './gpsFilterService';
 import { historicalTravelService } from './historicalTravelService';
+import { generateEveningStops } from '../utils/routeTiming';
 
 export interface ETAPredictionResult {
   busId: string;
@@ -53,7 +54,7 @@ class ETAService {
       include: {
         route: {
           include: {
-            stops: { orderBy: { sequence: 'asc' } },
+            stops: { orderBy: { sequence: 'asc' } }, description: true,
           },
         },
       },
@@ -68,7 +69,7 @@ class ETAService {
       include: {
         route: {
           include: {
-            stops: { orderBy: { sequence: 'asc' } },
+            stops: { orderBy: { sequence: 'asc' } }, description: true,
           },
         },
       },
@@ -76,7 +77,7 @@ class ETAService {
     });
 
     const route = activeTrip?.route || bus.route;
-    const rawStops = route?.stops || [];
+    let rawStops = route?.stops || []; const isEvening = new Date().getHours() >= 12; if (isEvening) { rawStops = generateEveningStops(rawStops, route?.description || null); }
     const stops: RouteStop[] = rawStops.map((s) => ({
       id: s.id,
       name: s.name,
@@ -338,7 +339,7 @@ class ETAService {
     const route = await prisma.route.findUnique({
       where: { id: routeId },
       include: {
-        stops: { orderBy: { sequence: 'asc' } },
+        stops: { orderBy: { sequence: 'asc' } }, description: true,
         buses: {
           include: {
             driver: { include: { user: { select: { name: true } } } },
@@ -352,7 +353,7 @@ class ETAService {
       throw new Error(`Route ${routeId} not found`);
     }
 
-    const stops = route.stops;
+    let stops = route.stops; const isEvening = new Date().getHours() >= 12; if (isEvening) { stops = generateEveningStops(stops, route.description); }
     let targetStop = stops.length > 0 ? stops[stops.length - 1] : null;
     if (targetStopId) {
       const match = stops.find((s) => s.id === targetStopId);

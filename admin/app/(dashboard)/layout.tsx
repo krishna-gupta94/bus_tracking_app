@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard, Users, Truck, Route,
@@ -61,9 +62,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="layout">
       {/* Sidebar */}
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <h1>Smart<span>Bus</span></h1>
-          <p>Campus Transit & Safety Console</p>
+        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Image src="/logo.png" alt="Logo" width={42} height={42} style={{ objectFit: 'cover', borderRadius: '50%' }} priority />
+          <div>
+            <h1>Smart<span>Bus</span></h1>
+            <p>Campus Transit Console</p>
+          </div>
         </div>
 
         <nav className="sidebar-nav">

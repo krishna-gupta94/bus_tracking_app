@@ -6,6 +6,10 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'College Bus Tracker — Admin',
   description: 'Real-time college bus tracking and fleet management system',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

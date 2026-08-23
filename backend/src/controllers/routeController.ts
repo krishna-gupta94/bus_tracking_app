@@ -1,3 +1,4 @@
+import { generateEveningStops, extractEveningDeparture, cleanDescription } from '../utils/routeTiming';
 import { Response } from 'express';
 import { prisma } from '../prisma/client';
 import { createError } from '../middleware/errorHandler';
@@ -112,7 +113,7 @@ export const getRoutes = async (req: AuthRequest, res: Response): Promise<void> 
     },
     orderBy: { name: 'asc' },
   });
-  res.json({ success: true, data: routes });
+  const routesWithEvening = routes.map(r => ({ ...r, cleanDescription: cleanDescription(r.description), eveningDepartureTime: extractEveningDeparture(r.description) || '04:15 PM', eveningStops: r.stops ? generateEveningStops(r.stops, r.description) : undefined })); res.json({ success: true, data: routesWithEvening });
 };
 
 export const getRoute = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -146,7 +147,7 @@ export const getRoute = async (req: AuthRequest, res: Response): Promise<void> =
     },
   });
   if (!route) throw createError('Route not found', 404);
-  res.json({ success: true, data: route });
+  res.json({ success: true, data: { ...route, cleanDescription: cleanDescription(route.description), eveningDepartureTime: extractEveningDeparture(route.description) || '04:15 PM', eveningStops: route.stops ? generateEveningStops(route.stops, route.description) : undefined } });
 };
 
 export const createRoute = async (req: AuthRequest, res: Response): Promise<void> => {

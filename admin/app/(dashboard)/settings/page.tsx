@@ -1,6 +1,53 @@
 'use client';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { User, Shield, Server, MapPin } from 'lucide-react';
+import { User, Shield, Server, MapPin, Key } from 'lucide-react';
+import toast from 'react-hot-toast';
+import api from '@/lib/api';
+
+function ChangePasswordForm() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword) return toast.error('Please fill in both fields');
+    if (currentPassword === newPassword) return toast.error('New password must be different');
+    
+    setLoading(true);
+    try {
+      await api.put('/auth/change-password', { currentPassword, newPassword });
+      toast.success('Password updated successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to change password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+      <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Key size={16} color="var(--accent)" />
+        Change Password
+      </h4>
+      <div className="form-group">
+        <label className="form-label">Current Password</label>
+        <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="form-input" placeholder="••••••••" required />
+      </div>
+      <div className="form-group">
+        <label className="form-label">New Password</label>
+        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="form-input" placeholder="••••••••" required />
+      </div>
+      <button type="submit" className="btn btn-primary" disabled={loading} style={{ marginTop: 8 }}>
+        {loading ? <><span className="spinner" /> Updating...</> : 'Update Password'}
+      </button>
+    </form>
+  );
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -28,6 +75,8 @@ export default function SettingsPage() {
             </div>
             <div className="form-group"><label className="form-label">Role</label><input className="form-input" value="Administrator" disabled /></div>
             <div className="form-group"><label className="form-label">Email</label><input className="form-input" value={user?.email || ''} disabled /></div>
+            
+            <ChangePasswordForm />
           </div>
         </div>
 

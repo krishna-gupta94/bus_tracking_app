@@ -11,18 +11,27 @@ import {
   ScrollView,
   Modal,
   Alert,
+  Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows } from '../../src/theme/colors';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('student1@college.edu');
-  const [password, setPassword] = useState('Student@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setEmail('');
+      setPassword('');
+      setErrorMsg(null);
+    }, [])
+  );
   const [showServerConfig, setShowServerConfig] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const { login, serverUrl, updateServerUrl } = useAuth();
@@ -54,20 +63,6 @@ export default function LoginScreen() {
     Alert.alert('Updated', `Server URL set to:\n${tempUrl}`);
   };
 
-  const setPreset = (role: 'STUDENT' | 'DRIVER') => {
-    setErrorMsg(null);
-    if (role === 'STUDENT') {
-      setEmail('student1@college.edu');
-      setPassword('Student@123');
-    } else {
-      setEmail('driver1@college.edu');
-      setPassword('Driver@123');
-    }
-  };
-
-  const isStudentSelected = email.toLowerCase().includes('student');
-  const isDriverSelected = email.toLowerCase().includes('driver');
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -80,50 +75,21 @@ export default function LoginScreen() {
       >
         {/* Branding Header */}
         <View style={styles.header}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="bus" size={38} color={colors.primary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={{ width: 48, height: 48, borderRadius: 24 }}
+              resizeMode="contain"
+            />
+            <Text style={styles.title}>
+              Smart<Text style={{ color: colors.primary }}>Bus</Text>
+            </Text>
           </View>
-          <Text style={styles.title}>
-            Smart<Text style={{ color: colors.primary }}>Bus</Text>
-          </Text>
           <Text style={styles.subtitle}>College Transit & Safety Platform</Text>
         </View>
 
         {/* Login Card */}
         <View style={styles.card}>
-          {/* Quick Demo Switcher */}
-          <View style={styles.presetRow}>
-            <TouchableOpacity
-              style={[styles.presetChip, isStudentSelected && styles.presetChipActive]}
-              onPress={() => setPreset('STUDENT')}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="school-outline"
-                size={14}
-                color={isStudentSelected ? colors.primary : colors.textSecondary}
-              />
-              <Text style={[styles.presetText, isStudentSelected && styles.presetTextActive]}>
-                Student Portal
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.presetChip, isDriverSelected && styles.presetChipActive]}
-              onPress={() => setPreset('DRIVER')}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="navigate-outline"
-                size={14}
-                color={isDriverSelected ? colors.primary : colors.textSecondary}
-              />
-              <Text style={[styles.presetText, isDriverSelected && styles.presetTextActive]}>
-                Driver Console
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Error Banner */}
           {errorMsg && (
             <View style={styles.errorBox}>
@@ -134,7 +100,7 @@ export default function LoginScreen() {
 
           {/* Email / ID Field */}
           <View style={styles.field}>
-            <Text style={styles.label}>{isDriverSelected ? 'Driver ID or Email' : 'Student ID or Email'}</Text>
+            <Text style={styles.label}>Student ID, Driver ID, or Email</Text>
             <View style={styles.inputContainer}>
               <Ionicons name="person-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
               <TextInput
@@ -144,9 +110,12 @@ export default function LoginScreen() {
                   setEmail(text);
                   setErrorMsg(null);
                 }}
-                placeholder={isDriverSelected ? 'e.g. DRV001 or driver@college.edu' : 'e.g. STU101 or student@college.edu'}
+                placeholder="e.g. STU101 or email@college.edu"
                 placeholderTextColor={colors.textDim}
                 autoCapitalize="none"
+                autoComplete="username"
+                textContentType="username"
+                keyboardType="email-address"
               />
             </View>
           </View>
@@ -171,6 +140,8 @@ export default function LoginScreen() {
                 placeholder="••••••••"
                 placeholderTextColor={colors.textDim}
                 secureTextEntry
+                autoComplete="current-password"
+                textContentType="password"
               />
             </View>
           </View>
@@ -538,5 +509,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     textDecorationLine: 'underline',
+  },
+  logoImage: {
+    width: 180,
+    height: 180,
+    marginBottom: 8,
   },
 });

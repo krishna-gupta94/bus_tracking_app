@@ -23,7 +23,7 @@ async function main() {
   const adminUser = await prisma.user.create({
     data: {
       name: 'System Admin',
-      email: 'admin@college.edu',
+      email: 'busadmin@gmail.com',
       passwordHash: await bcrypt.hash('Admin@123', ROUNDS),
       role: 'ADMIN',
       status: 'ACTIVE',
@@ -216,7 +216,7 @@ async function main() {
   console.log('═══════════════════════════════════════════════════');
   console.log('  DEVELOPMENT CREDENTIALS (DO NOT USE IN PRODUCTION)');
   console.log('═══════════════════════════════════════════════════');
-  console.log('  Admin:    admin@college.edu    / Admin@123');
+  console.log('  Admin:    busadmin@gmail.com    / Admin@123');
   console.log('  Driver 1: driver1@college.edu  / Driver@123');
   console.log('  Driver 2: driver2@college.edu  / Driver@123');
   console.log('  Student:  student1@college.edu / Student@123');

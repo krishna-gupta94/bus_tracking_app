@@ -80,6 +80,9 @@ interface Route {
   status: string;
   stops: Stop[];
   buses: BusInfo[];
+  eveningStops?: Stop[];
+  eveningDepartureTime?: string;
+  cleanDescription?: string;
   _count?: { buses: number; students: number; stops?: number };
 }
 
@@ -796,6 +799,36 @@ function RouteCard({ route, onEdit, onDelete, onReloadRequired }: {
                           Clear search and filters to enable manual sequence reordering
                         </p>
                       )}
+
+                      {/* Evening Schedule */}
+                      {route.eveningStops && route.eveningStops.length > 0 && (
+                        <div style={{ marginTop: 24, paddingTop: 16, borderTop: '2px dashed var(--border)' }}>
+                          <h4 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
+                            Evening Schedule — <span style={{ color: 'var(--primary)', fontStyle: 'italic' }}>Auto Generated</span>
+                          </h4>
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                            Automatically generated from morning route timings. Evening Departure: <strong>{route.eveningDepartureTime}</strong>
+                          </p>
+                          <div className="stop-list" style={{ opacity: 0.9 }}>
+                            {route.eveningStops.map(s => (
+                              <div key={s.id} className="stop-item" style={{ background: 'var(--bg-secondary)' }}>
+                                <div className="stop-seq">
+                                  {s.sequence}
+                                </div>
+                                <div className="stop-info">
+                                  <div className="stop-name">
+                                    {s.name}
+                                  </div>
+                                  <div className="stop-meta">
+                                    {s.address && <span>📍 {s.address}</span>}
+                                    {s.eta && <span>🕐 ETA: {s.eta}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1019,7 +1052,8 @@ function RouteCard({ route, onEdit, onDelete, onReloadRequired }: {
 function RouteModal({ route, onClose, onSave }: { route: Route | null; onClose: () => void; onSave: () => void }) {
   const [form, setForm] = useState({
     name: route?.name || '',
-    description: route?.description || '',
+    description: route?.cleanDescription || '',
+    eveningDepartureTime: route?.eveningDepartureTime || '04:15 PM',
     status: route?.status || 'ACTIVE',
   });
   const [saving, setSaving] = useState(false);
@@ -1027,12 +1061,19 @@ function RouteModal({ route, onClose, onSave }: { route: Route | null; onClose: 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    
+    // Embed evening departure into description for backend storage
+    const payload = {
+      ...form,
+      description: `${form.description.trim()} [EVENING_DEPARTURE: ${form.eveningDepartureTime.trim()}]`.trim(),
+    };
+
     try {
       if (route) {
-        await api.put(`/routes/${route.id}`, form);
+        await api.put(`/routes/${route.id}`, payload);
         toast.success('Route updated');
       } else {
-        await api.post('/routes', form);
+        await api.post('/routes', payload);
         toast.success('Route created');
       }
       onSave();
@@ -1069,6 +1110,16 @@ function RouteModal({ route, onClose, onSave }: { route: Route | null; onClose: 
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="Optional description of the route"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Evening Departure Time *</label>
+              <input
+                className="form-input"
+                value={form.eveningDepartureTime}
+                onChange={e => setForm(f => ({ ...f, eveningDepartureTime: e.target.value }))}
+                placeholder="e.g. 04:15 PM"
+                required
               />
             </div>
             <div className="form-group">
