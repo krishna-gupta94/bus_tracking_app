@@ -1,0 +1,1 @@
+import { prisma } from './src/prisma/client'; async function run() { const student = await prisma.student.findFirst({include: {assignedRoute: {include: {stops: true}}}}); console.log(JSON.stringify(student, null, 2)); } run();

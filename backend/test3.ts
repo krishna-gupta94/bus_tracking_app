@@ -1,0 +1,1 @@
+import { getMyStopETA } from './src/controllers/etaController'; import { Request, Response } from 'express'; async function run() { const req = { user: { id: 'cmt1959aq0006e0utchx4wkws', role: 'STUDENT' }, query: {} } as any; const res = { json: (data) => console.log(JSON.stringify(data, null, 2)) } as any; await getMyStopETA(req, res); } run();

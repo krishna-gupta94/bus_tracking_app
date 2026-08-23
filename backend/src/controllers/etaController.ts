@@ -49,8 +49,7 @@ export const getMyStopETA = async (req: AuthRequest, res: Response): Promise<voi
     where: { userId: req.user.id },
     include: {
       assignedRoute: {
-        // @ts-ignore
-        include: { stops: { orderBy: { sequence: 'asc' } }, description: true },
+        include: { stops: { orderBy: { sequence: 'asc' } } },
       },
       assignedStop: true,
     },

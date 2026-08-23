@@ -54,7 +54,7 @@ class ETAService {
       include: {
         route: {
           include: {
-            stops: { orderBy: { sequence: 'asc' } }, description: true,
+            stops: { orderBy: { sequence: 'asc' } }, 
           },
         },
       },
@@ -69,7 +69,7 @@ class ETAService {
       include: {
         route: {
           include: {
-            stops: { orderBy: { sequence: 'asc' } }, description: true,
+            stops: { orderBy: { sequence: 'asc' } }, 
           },
         },
       },
@@ -339,7 +339,7 @@ class ETAService {
     const route = await prisma.route.findUnique({
       where: { id: routeId },
       include: {
-        stops: { orderBy: { sequence: 'asc' } }, description: true,
+        stops: { orderBy: { sequence: 'asc' } }, 
         buses: {
           include: {
             driver: { include: { user: { select: { name: true } } } },
