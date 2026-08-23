@@ -10,6 +10,7 @@ import {
   getConflictDetail,
   resolveConflict,
   getPendingConfirmation,
+  exportBoardingData,
 } from '../controllers/boardingController';
 import { authenticate, requireRole } from '../middleware/auth';
 
@@ -25,6 +26,7 @@ router.post('/confirm', requireRole('STUDENT'), confirmBoarding);
 router.get('/pending/:studentId', requireRole('STUDENT', 'ADMIN'), getPendingConfirmation);
 
 // Admin & Emergency endpoints
+router.get('/export', requireRole('ADMIN'), exportBoardingData);
 router.get('/admin/route/:routeId', requireRole('ADMIN'), getRouteBoardingOverview);
 router.get('/bus/:busId/onboard', requireRole('ADMIN', 'DRIVER'), getBusOnboardStudents);
 

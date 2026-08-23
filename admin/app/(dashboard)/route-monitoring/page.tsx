@@ -4,7 +4,7 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import {
   Route as RouteIcon, Bus as BusIcon, UserCheck, ShieldAlert,
-  Play, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Search,
+  Play, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Search, Download,
   Phone, Users, Activity
 } from 'lucide-react';
 import { io } from 'socket.io-client';
@@ -78,6 +78,50 @@ export default function RouteMonitoringPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Simulation state
+  
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportFilters, setExportFilters] = useState({ date: '', routeId: '', tripType: '', status: '' });
+  
+  const handleExportCSV = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExporting(true);
+    try {
+      const q = new URLSearchParams();
+      if (exportFilters.date) q.append('date', exportFilters.date);
+      if (exportFilters.routeId) q.append('routeId', exportFilters.routeId);
+      if (exportFilters.tripType) q.append('tripType', exportFilters.tripType);
+      if (exportFilters.status) q.append('status', exportFilters.status);
+      
+      const res = await api.get('/boarding/export?' + q.toString(), { responseType: 'blob' });
+      
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'boarding_export.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      toast.success('CSV downloaded successfully');
+      setShowExportModal(false);
+    } catch (err: any) {
+      if (err.response && err.response.data instanceof Blob) {
+         err.response.data.text().then(text => {
+           try {
+             const data = JSON.parse(text);
+             toast.error(data.message || 'Export failed');
+           } catch {
+             toast.error('Export failed');
+           }
+         });
+      } else {
+        toast.error('Export failed');
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const [simulating, setSimulating] = useState<boolean>(false);
   const [simReport, setSimReport] = useState<SimulationReport | null>(null);
   const [showSimModal, setShowSimModal] = useState<boolean>(false);
@@ -381,9 +425,17 @@ export default function RouteMonitoringPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => loadRouteData(selectedRouteId)}
+          
+            <button
+              className="btn"
+              style={{ backgroundColor: '#10b981', color: 'white', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() => setShowExportModal(true)}
+              title="Download CSV"
+            >
+              <Download size={14} /> Download CSV
+            </button>
+
+            <button className="btn btn-secondary" onClick={() => loadRouteData(selectedRouteId)}
             title="Refresh Route Overview"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >

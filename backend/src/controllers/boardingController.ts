@@ -253,3 +253,110 @@ export const getPendingConfirmation = async (req: AuthRequest, res: Response): P
 
   res.json({ success: true, data: pending || null });
 };
+
+
+export const exportBoardingData = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { date, startDate, endDate, routeId, busId, driverId, stopId, studentId, tripType, status } = req.query as Record<string, string>;
+
+  const where: any = {};
+  
+  if (routeId) where.routeId = routeId;
+  if (busId) where.busId = busId;
+  if (stopId) where.stopId = stopId;
+  if (studentId) where.studentId = studentId;
+  if (status) where.status = status;
+
+  if (date) {
+    const start = new Date(date); start.setHours(0, 0, 0, 0);
+    const end = new Date(date); end.setHours(23, 59, 59, 999);
+    where.createdAt = { gte: start, lte: end };
+  } else if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) {
+      const s = new Date(startDate); s.setHours(0, 0, 0, 0);
+      where.createdAt.gte = s;
+    }
+    if (endDate) {
+      const e = new Date(endDate); e.setHours(23, 59, 59, 999);
+      where.createdAt.lte = e;
+    }
+  }
+
+  if (driverId) {
+    where.bus = { driverId: driverId };
+  }
+
+  const events = await prisma.boardingEvent.findMany({
+    where,
+    include: {
+      student: { include: { user: true } },
+      bus: { include: { driver: { include: { user: true } } } },
+      route: true,
+      stop: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const escapeCSV = (val: any) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const headers = [
+    'Date', 'Time', 'Student ID', 'Student Name', 'Course',
+    'Bus Number', 'Bus Registration Number', 'Driver Name',
+    'Route Name', 'Boarding Stop', 'Stop Order',
+    'Boarding Detection Method', 'Trip Type', 'Boarding Status'
+  ];
+
+  const rows = [];
+  
+  for (const ev of events) {
+    const hour = ev.createdAt.getHours();
+    const currentTripType = hour < 12 ? 'Morning' : 'Evening';
+    
+    if (tripType && tripType.toUpperCase() !== currentTripType.toUpperCase()) continue;
+
+    const d = new Date(ev.createdAt);
+    const formattedDate = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formattedTime = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    
+    const course = ev.student?.courseStartYear && ev.student?.courseEndYear 
+                   ? `${ev.student.courseStartYear}-${ev.student.courseEndYear}` 
+                   : 'N/A';
+
+    const stopName = ev.stop?.name || (ev.stopId?.includes('_evening') ? ev.stopId.split('_')[0] + ' (Evening)' : 'N/A');
+
+    rows.push([
+      escapeCSV(formattedDate),
+      escapeCSV(formattedTime),
+      escapeCSV(ev.student?.studentCode || ev.student?.id),
+      escapeCSV(ev.student?.user?.name),
+      escapeCSV(course),
+      escapeCSV(ev.bus?.busNumber),
+      escapeCSV(ev.bus?.registrationNumber),
+      escapeCSV(ev.bus?.driver?.user?.name),
+      escapeCSV(ev.route?.name),
+      escapeCSV(stopName),
+      escapeCSV(ev.stop?.sequence || 'N/A'),
+      escapeCSV(ev.confirmationSource || ev.gpsInference || 'UNKNOWN'),
+      escapeCSV(currentTripType),
+      escapeCSV(ev.status)
+    ].join(','));
+  }
+
+  if (rows.length === 0) {
+    res.status(404).json({ success: false, message: 'No boarding records found for the selected filters.' });
+    return;
+  }
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="boarding_export.csv"');
+  res.status(200).send(csvContent);
+};
