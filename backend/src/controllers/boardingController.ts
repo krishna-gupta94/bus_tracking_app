@@ -291,8 +291,7 @@ export const exportBoardingData = async (req: AuthRequest, res: Response): Promi
     include: {
       student: { include: { user: true } },
       bus: { include: { driver: { include: { user: true } } } },
-      route: true,
-      stop: true,
+      route: { include: { stops: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -329,7 +328,9 @@ export const exportBoardingData = async (req: AuthRequest, res: Response): Promi
                    ? `${ev.student.courseStartYear}-${ev.student.courseEndYear}` 
                    : 'N/A';
 
-    const stopName = ev.stop?.name || (ev.stopId?.includes('_evening') ? ev.stopId.split('_')[0] + ' (Evening)' : 'N/A');
+    const matchedStop = (ev.route as any)?.stops?.find((s: any) => s.id === ev.stopId);
+    const stopName = matchedStop?.name || (ev.stopId?.includes('_evening') ? ev.stopId.split('_')[0] + ' (Evening)' : (ev.stopId || 'N/A'));
+    const stopOrder = matchedStop?.sequence ?? 'N/A';
 
     rows.push([
       escapeCSV(formattedDate),
@@ -342,17 +343,13 @@ export const exportBoardingData = async (req: AuthRequest, res: Response): Promi
       escapeCSV(ev.bus?.driver?.user?.name),
       escapeCSV(ev.route?.name),
       escapeCSV(stopName),
-      escapeCSV(ev.stop?.sequence || 'N/A'),
+      escapeCSV(stopOrder),
       escapeCSV(ev.confirmationSource || ev.gpsInference || 'UNKNOWN'),
       escapeCSV(currentTripType),
       escapeCSV(ev.status)
     ].join(','));
   }
 
-  if (rows.length === 0) {
-    res.status(404).json({ success: false, message: 'No boarding records found for the selected filters.' });
-    return;
-  }
 
   const csvContent = [headers.join(','), ...rows].join('\n');
 

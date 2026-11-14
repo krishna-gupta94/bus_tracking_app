@@ -30,38 +30,15 @@ async function resolveLocationAddress(
   stopName?: string | null,
   routeName?: string | null
 ): Promise<string> {
-  if (typeof lat !== 'number' || typeof lon !== 'number') {
-    return 'Location unavailable (GPS permission denied or signal lost)';
-  }
-
-  try {
-    // Attempt reverse geocoding via OpenStreetMap Nominatim with timeout
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
-
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
-      {
-        headers: {
-          'User-Agent': 'SmartBus-College-Tracker/1.0',
-          'Accept-Language': 'en',
-        },
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = (await res.json()) as any;
-      if (data && data.display_name) {
-        // Return cleaned up short address
-        const parts = String(data.display_name).split(', ');
-        const shortAddr = parts.slice(0, 4).join(', ');
-        return shortAddr;
-      }
+  if (typeof lat === 'number' && typeof lon === 'number') {
+    if (stopName && routeName) {
+      return `Near ${stopName}, ${routeName} (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+    } else if (stopName) {
+      return `Near ${stopName} (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+    } else if (routeName) {
+      return `Along ${routeName} (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
     }
-  } catch (e) {
-    // Fallback to stop/route reference
+    return `Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)} (Bareilly Region)`;
   }
 
   if (stopName && routeName) {
@@ -71,7 +48,7 @@ async function resolveLocationAddress(
   } else if (routeName) {
     return `Along ${routeName} (Bareilly)`;
   }
-  return `Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)} (Bareilly Region)`;
+  return 'Transit Area (Bareilly Region)';
 }
 
 export const createSOSAlert = async (req: AuthRequest, res: Response): Promise<void> => {

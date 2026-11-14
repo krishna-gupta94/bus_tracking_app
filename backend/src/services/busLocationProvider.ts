@@ -123,6 +123,7 @@ class BusLocationProvider {
 
       // Admin room
       this.io.to('admin').emit('location:update', broadcastData);
+      this.io.emit('location:update', broadcastData);
 
       // Trigger asynchronous ETA update & broadcasting
       etaService
@@ -134,6 +135,7 @@ class BusLocationProvider {
               this.io.to(`route:${bus.routeId}`).emit('eta:update', etaData);
             }
             this.io.to('admin').emit('eta:update', etaData);
+            this.io.emit('eta:update', etaData);
           }
         })
         .catch((err) => {

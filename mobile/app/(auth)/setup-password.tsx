@@ -67,7 +67,7 @@ export default function SetupPasswordScreen() {
         </Text>
         <TouchableOpacity style={styles.loginBtn} onPress={() => router.replace('/(auth)/login')} activeOpacity={0.85}>
           <Text style={styles.loginBtnText}>Go to Login</Text>
-          <Ionicons name="arrow-forward" size={18} color="#fff" />
+          <Ionicons name="arrow-forward" size={18} color="#000" />
         </TouchableOpacity>
       </View>
     );
@@ -196,9 +196,9 @@ export default function SetupPasswordScreen() {
           activeOpacity={0.85}
         >
           {loading
-            ? <ActivityIndicator color="#fff" />
+            ? <ActivityIndicator color="#000" />
             : <><Text style={styles.submitBtnText}>Activate My Account</Text>
-                <Ionicons name="checkmark-done" size={18} color="#fff" /></>}
+                <Ionicons name="checkmark-done" size={18} color="#000" /></>}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -239,16 +239,16 @@ const styles = StyleSheet.create({
   tipText:     { fontSize: 12 },
 
   submitBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-                 backgroundColor: '#22c55e', borderRadius: 14, paddingVertical: 14, marginTop: 24 },
+                 backgroundColor: colors.primary ?? '#2563eb', borderRadius: 14, paddingVertical: 14, marginTop: 24 },
   submitBtnDisabled: { opacity: 0.4 },
-  submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  submitBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
 
-  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#064e3b',
-                   justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  successTitle:  { fontSize: 24, fontWeight: '900', color: colors.textPrimary ?? '#f1f5f9', marginBottom: 10 },
-  successSubtitle: { fontSize: 14, color: colors.textSecondary ?? '#94a3b8', textAlign: 'center',
+  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#eff6ff',
+                   justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 2, borderColor: '#2563eb' },
+  successTitle:  { fontSize: 24, fontWeight: '900', color: colors.textPrimary ?? '#000000', marginBottom: 10 },
+  successSubtitle: { fontSize: 14, color: colors.textSecondary ?? '#1e293b', textAlign: 'center',
                      lineHeight: 20, marginBottom: 28 },
-  loginBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary ?? '#38bdf8',
+  loginBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary ?? '#2563eb',
                  paddingHorizontal: 28, paddingVertical: 13, borderRadius: 12 },
-  loginBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  loginBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
 });

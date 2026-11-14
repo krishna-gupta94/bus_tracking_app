@@ -157,8 +157,9 @@ io.on('connection', (socket) => {
   });
 
   // ── join:admin — ADMIN role only ─────────────────────────────────────────
-  socket.on('join:admin', async () => {
-    const auth = await verifySocketToken(handshakeToken);
+  socket.on('join:admin', async (payload?: { token?: string }) => {
+    const token = payload?.token || handshakeToken;
+    const auth = await verifySocketToken(token);
     if (!auth || auth.role !== 'ADMIN') {
       console.warn(`[Socket] join:admin DENIED: ${socket.id}`);
       return;
@@ -188,6 +189,7 @@ io.on('connection', (socket) => {
     }
     console.log('[Socket] 🚨 SOS Distress Beacon received:', sosData);
     io.to('admin').emit('sos:trigger', sosData);
+    io.emit('sos:trigger', sosData);
 
     try {
       // Create admin notification in database

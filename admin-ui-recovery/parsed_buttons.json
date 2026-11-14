@@ -1,0 +1,632 @@
+[
+  {
+    "file": "app/login/page.tsx",
+    "line": 86,
+    "code": "<button",
+    "context": "<button type=\"submit\" className=\"btn btn-primary\" style={{ width: '100%', justifyContent: 'center', padding: '12px', marginTop: 12 }} disabled={loadin"
+  },
+  {
+    "file": "app/(dashboard)/layout.tsx",
+    "line": 168,
+    "code": "<button onClick={logout} className=\"btn btn-ghost btn-icon\" title=\"Sign Out\">",
+    "context": "</div> <button onClick={logout} className=\"btn btn-ghost btn-icon\" title=\"Sign Out\"> <LogOut size={16} /> </button> </div> </div> </aside>"
+  },
+  {
+    "file": "app/(dashboard)/layout.tsx",
+    "line": 217,
+    "code": "<Link href=\"/sos-alerts\" className=\"btn btn-sm\" style={{ background: '#ffffff', color: '#b91c1c', fontWeight: 700 }}>",
+    "context": "<div style={{ display: 'flex', gap: 8 }}> <Link href=\"/sos-alerts\" className=\"btn btn-sm\" style={{ background: '#ffffff', color: '#b91c1c', fontWeight"
+  },
+  {
+    "file": "app/(dashboard)/layout.tsx",
+    "line": 220,
+    "code": "<button onClick={() => setLiveEmergency(null)} style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', padding: '4px 8px', fontSize: 16 }}>",
+    "context": "</Link> <button onClick={() => setLiveEmergency(null)} style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', paddin"
+  },
+  {
+    "file": "app/(dashboard)/dashboard/page.tsx",
+    "line": 96,
+    "code": "<Link href=\"/sos-alerts\" className=\"btn btn-danger btn-sm\">",
+    "context": "<div style={{ display: 'flex', gap: 10 }}> <Link href=\"/sos-alerts\" className=\"btn btn-danger btn-sm\"> <ShieldAlert size={14} /> SOS Incidents ({emerg"
+  },
+  {
+    "file": "app/(dashboard)/dashboard/page.tsx",
+    "line": 99,
+    "code": "<Link href=\"/live-tracking\" className=\"btn btn-primary btn-sm\">",
+    "context": "</Link> <Link href=\"/live-tracking\" className=\"btn btn-primary btn-sm\"> <Navigation size={14} /> Fullscreen Map </Link> </div> </div>"
+  },
+  {
+    "file": "app/(dashboard)/dashboard/page.tsx",
+    "line": 159,
+    "code": "<Link href=\"/live-tracking\" className=\"btn btn-ghost btn-sm\" style={{ color: 'var(--accent)' }}>",
+    "context": "</div> <Link href=\"/live-tracking\" className=\"btn btn-ghost btn-sm\" style={{ color: 'var(--accent)' }}> Expand <ArrowRight size={13} /> </Link> </div>"
+  },
+  {
+    "file": "app/(dashboard)/dashboard/page.tsx",
+    "line": 175,
+    "code": "<Link href=\"/notifications\" className=\"btn btn-ghost btn-sm\" style={{ color: 'var(--accent)' }}>",
+    "context": "</h3> <Link href=\"/notifications\" className=\"btn btn-ghost btn-sm\" style={{ color: 'var(--accent)' }}> All </Link> </div> <div style={{ padding: 16, d"
+  },
+  {
+    "file": "app/(dashboard)/dashboard/page.tsx",
+    "line": 221,
+    "code": "<Link href=\"/trips\" className=\"btn btn-secondary btn-sm\">View Full Logs</Link>",
+    "context": "<h3 className=\"card-title\">Recent Trips Activity</h3> <Link href=\"/trips\" className=\"btn btn-secondary btn-sm\">View Full Logs</Link> </div> <div class"
+  },
+  {
+    "file": "app/(dashboard)/live-tracking/page.tsx",
+    "line": 28,
+    "code": "<Link href=\"/sos-alerts\" className=\"btn btn-danger btn-sm\">",
+    "context": "<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}> <Link href=\"/sos-alerts\" className=\"btn btn-danger btn-sm\"> <ShieldAlert size={14} />"
+  },
+  {
+    "file": "app/(dashboard)/buses/page.tsx",
+    "line": 42,
+    "code": "<button onClick={onClose} className=\"btn btn-ghost btn-icon\"><X size={18} /></button>",
+    "context": "<h3 className=\"modal-title\">{bus ? 'Edit Bus' : 'Add Bus'}</h3> <button onClick={onClose} className=\"btn btn-ghost btn-icon\"><X size={18} /></button> "
+  },
+  {
+    "file": "app/(dashboard)/buses/page.tsx",
+    "line": 88,
+    "code": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button>",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\""
+  },
+  {
+    "file": "app/(dashboard)/buses/page.tsx",
+    "line": 89,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={saving}>",
+    "context": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\"btn btn-primary\" disabled={savi"
+  },
+  {
+    "file": "app/(dashboard)/buses/page.tsx",
+    "line": 143,
+    "code": "<button className=\"btn btn-primary\" onClick={() => setModal({ open: true, bus: null })}>",
+    "context": "</div> <button className=\"btn btn-primary\" onClick={() => setModal({ open: true, bus: null })}> <Plus size={16} /> Add Bus </button> </div> <div class"
+  },
+  {
+    "file": "app/(dashboard)/buses/page.tsx",
+    "line": 200,
+    "code": "<button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setModal({ open: true, bus: b })}><Edit2 size={14} /></button>",
+    "context": "<div style={{display:'flex',gap:6}}> <button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setModal({ open: true, bus: b })}><Edit2 size={1"
+  },
+  {
+    "file": "app/(dashboard)/buses/page.tsx",
+    "line": 201,
+    "code": "<button className=\"btn btn-danger btn-icon btn-sm\" onClick={() => deleteBus(b.id, b.busNumber)}><Trash2 size={14} /></button>",
+    "context": "<button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setModal({ open: true, bus: b })}><Edit2 size={14} /></button> <button className=\"btn"
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 43,
+    "code": "<button onClick={onClose} className=\"btn btn-ghost btn-icon\"><X size={18} /></button>",
+    "context": "<h3 className=\"modal-title\">{driver ? 'Edit Driver' : 'Add Driver'}</h3> <button onClick={onClose} className=\"btn btn-ghost btn-icon\"><X size={18} /><"
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 96,
+    "code": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button>",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\""
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 97,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={saving}>",
+    "context": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\"btn btn-primary\" disabled={savi"
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 149,
+    "code": "<button className=\"btn btn-primary\" onClick={() => setModal({ open: true, driver: null })}>",
+    "context": "</div> <button className=\"btn btn-primary\" onClick={() => setModal({ open: true, driver: null })}> <Plus size={16} /> Add Driver </button> </div> <div"
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 201,
+    "code": "<button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setModal({ open: true, driver: d })} title=\"Edit Driver\"><Edit2 size={14} /></button>",
+    "context": "<div style={{display:'flex',gap:6}}> <button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setModal({ open: true, driver: d })} title=\"Edit"
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 202,
+    "code": "<button",
+    "context": "<button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setModal({ open: true, driver: d })} title=\"Edit Driver\"><Edit2 size={14} /></button>"
+  },
+  {
+    "file": "app/(dashboard)/drivers/page.tsx",
+    "line": 210,
+    "code": "<button className=\"btn btn-danger btn-icon btn-sm\" onClick={() => deleteDriver(d.id, d.user?.name)} title=\"Delete Driver\"><Trash2 size={14} /></button>",
+    "context": "</button> <button className=\"btn btn-danger btn-icon btn-sm\" onClick={() => deleteDriver(d.id, d.user?.name)} title=\"Delete Driver\"><Trash2 size={14} "
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 229,
+    "code": "<button className=\"btn-close\" onClick={onClose}>✕</button>",
+    "context": "</div> <button className=\"btn-close\" onClick={onClose}>✕</button> </div> <form onSubmit={submit}> <div className=\"modal-body\" style={{ display: 'flex'"
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 430,
+    "code": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" onClick={onClose} className=\"btn btn-secondary\"> Cancel </button> <button type=\"submit\" className"
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 433,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={saving}>",
+    "context": "</button> <button type=\"submit\" className=\"btn btn-primary\" disabled={saving}> {saving ? ( <> <Loader2 size={16} className=\"spinner\" /> Saving… </> ) "
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 582,
+    "code": "<button className=\"btn btn-primary\" onClick={() => setModal({ open: true, student: null })}>",
+    "context": "</div> <button className=\"btn btn-primary\" onClick={() => setModal({ open: true, student: null })}> <Plus size={16} /> Add Student </button> </div> {/"
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 741,
+    "code": "<button",
+    "context": "<div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}> <button className=\"btn btn-secondary btn-sm\" onClick={() => setModal({ open: tr"
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 750,
+    "code": "<button",
+    "context": "</button> <button className=\"btn btn-secondary btn-sm\" onClick={() => setPasswordModal({ open: true, user: { id: s.user.id, name: s.user.name, email: "
+  },
+  {
+    "file": "app/(dashboard)/students/page.tsx",
+    "line": 758,
+    "code": "<button",
+    "context": "</button> <button className=\"btn btn-danger btn-sm\" onClick={() => deleteStudent(s.id, s.user?.name)} title=\"Delete Student\" style={{ padding: '5px 8p"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 131,
+    "code": "<button className=\"btn btn-secondary btn-sm\" onClick={onCancel}>Cancel</button>",
+    "context": "<div className=\"confirm-dialog-footer\"> <button className=\"btn btn-secondary btn-sm\" onClick={onCancel}>Cancel</button> <button className=\"btn btn-dan"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 132,
+    "code": "<button className=\"btn btn-danger btn-sm\" onClick={onConfirm}>{confirmLabel}</button>",
+    "context": "<button className=\"btn btn-secondary btn-sm\" onClick={onCancel}>Cancel</button> <button className=\"btn btn-danger btn-sm\" onClick={onConfirm}>{confirm"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 244,
+    "code": "<button onClick={onCancel} className=\"btn btn-ghost btn-icon\"><X size={18} /></button>",
+    "context": "</h3> <button onClick={onCancel} className=\"btn btn-ghost btn-icon\"><X size={18} /></button> </div> <form onSubmit={submit}> <div className=\"modal-bod"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 357,
+    "code": "<button",
+    "context": "Select Location on Map <button type=\"button\" onClick={() => setShowMap(m => !m)} className=\"btn btn-ghost btn-sm\" style={{ marginLeft: 'auto', padding"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 393,
+    "code": "<button type=\"button\" onClick={onCancel} className=\"btn btn-secondary\">Cancel</button>",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" onClick={onCancel} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className="
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 394,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={saving}>",
+    "context": "<button type=\"button\" onClick={onCancel} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\"btn btn-primary\" disabled={sav"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 550,
+    "code": "<button",
+    "context": "</span> <button onClick={handleCopyId} className=\"route-meta-pill\" title=\"Click to copy Route ID\" style={{ cursor: 'pointer', background: 'transparent"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 601,
+    "code": "<button",
+    "context": "<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}> <button className=\"btn btn-ghost btn-icon btn-sm\" onClick={e => { e.stopPropagation();"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 608,
+    "code": "<button",
+    "context": "</button> <button className=\"btn btn-danger btn-icon btn-sm\" onClick={e => { e.stopPropagation(); onDelete(route.id, route.name); }} title=\"Delete Rou"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 626,
+    "code": "<button",
+    "context": "<div className=\"route-tabs\"> <button className={`route-tab-btn ${activeTab === 'stops' ? 'active' : ''}`} onClick={() => setActiveTab('stops')} > <Map"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 633,
+    "code": "<button",
+    "context": "</button> <button className={`route-tab-btn ${activeTab === 'buses' ? 'active' : ''}`} onClick={() => setActiveTab('buses')} > <Bus size={15} /> Assig"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 640,
+    "code": "<button",
+    "context": "</button> <button className={`route-tab-btn ${activeTab === 'map' ? 'active' : ''}`} onClick={() => setActiveTab('map')} > <MapIcon size={15} /> Route"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 668,
+    "code": "<button",
+    "context": "{(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(f => ( <button key={f} className={`chip ${statusFilter === f ? (f === 'INACTIVE' ? 'inactive-chip-sel' :"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 691,
+    "code": "<button",
+    "context": "{/* Refresh */} <button className=\"btn btn-ghost btn-icon btn-sm\" onClick={fetchFullRoute} disabled={loadingDetail} title=\"Refresh route data\" >"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 700,
+    "code": "<button",
+    "context": "{/* Add Stop */} <button className=\"btn btn-primary btn-sm\" onClick={() => setStopModal({ open: true, stop: null })} > <Plus size={14} /> Add Stop </b"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 759,
+    "code": "<button",
+    "context": "<div className=\"stop-actions\"> <button className=\"move-btn\" onClick={() => moveStop(s.id, 'up')} disabled={isFirst || reordering || search !== '' || s"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 767,
+    "code": "<button",
+    "context": "</button> <button className=\"move-btn\" onClick={() => moveStop(s.id, 'down')} disabled={isLast || reordering || search !== '' || statusFilter !== 'ALL"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 776,
+    "code": "<button",
+    "context": "<div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 4px' }} /> <button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() ="
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 783,
+    "code": "<button",
+    "context": "</button> <button className=\"btn btn-danger btn-icon btn-sm\" onClick={() => setConfirmDelete({ open: true, stop: s })} title=\"Delete stop\" > <Trash2 s"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 847,
+    "code": "<Link href=\"/buses\" className=\"btn btn-secondary btn-sm\">",
+    "context": "</div> <Link href=\"/buses\" className=\"btn btn-secondary btn-sm\"> <Bus size={13} /> Manage Fleet / Assign Buses </Link> </div> {buses.length === 0 ? ("
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 861,
+    "code": "<Link href=\"/buses\" className=\"btn btn-primary btn-sm\">",
+    "context": "</p> <Link href=\"/buses\" className=\"btn btn-primary btn-sm\"> <Plus size={13} /> Assign a Bus to this Route </Link> </div> ) : ( <div className=\"route-"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 969,
+    "code": "<Link href={`/buses`} className=\"btn btn-ghost btn-sm\" style={{ padding: '2px 8px', fontSize: 11 }}>",
+    "context": "<span>👥 Capacity: {bus.capacity} seats</span> <Link href={`/buses`} className=\"btn btn-ghost btn-sm\" style={{ padding: '2px 8px', fontSize: 11 }}> Vi"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 1092,
+    "code": "<button onClick={onClose} className=\"btn btn-ghost btn-icon\"><X size={18} /></button>",
+    "context": "<h3 className=\"modal-title\">{route ? 'Edit Route' : 'Create Route'}</h3> <button onClick={onClose} className=\"btn btn-ghost btn-icon\"><X size={18} /><"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 1138,
+    "code": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button>",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\""
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 1139,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={saving}>",
+    "context": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">Cancel</button> <button type=\"submit\" className=\"btn btn-primary\" disabled={savi"
+  },
+  {
+    "file": "app/(dashboard)/routes/page.tsx",
+    "line": 1226,
+    "code": "<button className=\"btn btn-primary\" onClick={() => setModal({ open: true, route: null })}>",
+    "context": "</select> <button className=\"btn btn-primary\" onClick={() => setModal({ open: true, route: null })}> <Plus size={16} /> Create Route </button> </div> "
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 429,
+    "code": "<button",
+    "context": "<button className=\"btn\" style={{ backgroundColor: '#10b981', color: 'white', display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => se"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 438,
+    "code": "<button className=\"btn btn-secondary\" onClick={() => loadRouteData(selectedRouteId)}",
+    "context": "<button className=\"btn btn-secondary\" onClick={() => loadRouteData(selectedRouteId)} title=\"Refresh Route Overview\" style={{ display: 'inline-flex', a"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 444,
+    "code": "<button",
+    "context": "</button> <button className=\"btn btn-primary\" onClick={handleRunSimulation} disabled={simulating} style={{ display: 'inline-flex', alignItems: 'center"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 563,
+    "code": "<button onClick={() => loadConflicts(selectedRouteId)} style={{ fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', color: '#e65100', fontWeight: 600 }}>",
+    "context": "</h3> <button onClick={() => loadConflicts(selectedRouteId)} style={{ fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', color: '#e6"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 589,
+    "code": "<button",
+    "context": "<div style={{ display: 'flex', gap: 8, flexShrink: 0, alignSelf: 'center' }}> <button onClick={() => handleResolveConflict(conflict.id, 'BOARDED')} di"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 596,
+    "code": "<button",
+    "context": "</button> <button onClick={() => handleResolveConflict(conflict.id, 'NOT_BOARDED')} disabled={resolvingId === conflict.id} style={{ padding: '8px 14px"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 720,
+    "code": "<button className=\"btn-close\" onClick={() => setShowSimModal(false)}>✕</button>",
+    "context": "</div> <button className=\"btn-close\" onClick={() => setShowSimModal(false)}>✕</button> </div> <div className=\"modal-body\" style={{ overflowY: 'auto', "
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 762,
+    "code": "<button className=\"btn btn-primary\" onClick={() => setShowSimModal(false)}>",
+    "context": "<div className=\"modal-footer\" style={{ borderTop: '1px solid var(--border)' }}> <button className=\"btn btn-primary\" onClick={() => setShowSimModal(fal"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 775,
+    "code": "<button type=\"button\" onClick={() => setShowExportModal(false)} className=\"btn btn-ghost btn-icon\"><XCircle size={18} /></button>",
+    "context": "<h3 className=\"modal-title\">Export Boarding Data</h3> <button type=\"button\" onClick={() => setShowExportModal(false)} className=\"btn btn-ghost btn-ico"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 811,
+    "code": "<button type=\"button\" className=\"btn btn-secondary\" onClick={() => setShowExportModal(false)}>Cancel</button>",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" className=\"btn btn-secondary\" onClick={() => setShowExportModal(false)}>Cancel</button> <button t"
+  },
+  {
+    "file": "app/(dashboard)/route-monitoring/page.tsx",
+    "line": 812,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={exporting}>",
+    "context": "<button type=\"button\" className=\"btn btn-secondary\" onClick={() => setShowExportModal(false)}>Cancel</button> <button type=\"submit\" className=\"btn btn"
+  },
+  {
+    "file": "app/(dashboard)/trips/page.tsx",
+    "line": 32,
+    "code": "<button key={s} className={`btn ${filter === s ? 'btn-primary' : 'btn-secondary'} btn-sm`} onClick={() => setFilter(s)}>",
+    "context": "{['', 'ACTIVE', 'COMPLETED', 'CANCELLED'].map(s => ( <button key={s} className={`btn ${filter === s ? 'btn-primary' : 'btn-secondary'} btn-sm`} onClic"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 167,
+    "code": "<button",
+    "context": "<button className=\"btn btn-secondary btn-sm\" onClick={loadAlerts} disabled={loading} > <RefreshCw size={14} className={loading ? 'animate-spin' : ''} "
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 238,
+    "code": "<button",
+    "context": "{(['ALL', 'NEW', 'ACKNOWLEDGED', 'RESOLVED'] as const).map((tab) => ( <button key={tab} className={`btn btn-sm ${filter === tab ? 'btn-primary' : 'btn"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 405,
+    "code": "<button",
+    "context": "<div style={{ display: 'inline-flex', gap: 6 }}> <button className=\"btn btn-secondary btn-sm\" onClick={() => setSelectedAlert(alert)} style={{ display"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 414,
+    "code": "<button",
+    "context": "{alert.status === 'NEW' && ( <button className=\"btn btn-primary btn-sm\" onClick={() => updateStatus(alert.id, 'ACKNOWLEDGED')} > Acknowledge </button>"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 423,
+    "code": "<button",
+    "context": "{alert.status !== 'RESOLVED' && ( <button className=\"btn btn-success btn-sm\" onClick={() => updateStatus(alert.id, 'RESOLVED')} > Resolve </button>"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 475,
+    "code": "<button className=\"btn btn-ghost btn-icon\" onClick={() => setSelectedAlert(null)}>",
+    "context": "</div> <button className=\"btn btn-ghost btn-icon\" onClick={() => setSelectedAlert(null)}> <X size={18} /> </button> </div> {/* Modal Body */}"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 602,
+    "code": "<button",
+    "context": "{selectedAlert.status === 'NEW' && ( <button className=\"btn btn-primary\" onClick={() => updateStatus(selectedAlert.id, 'ACKNOWLEDGED')} > Acknowledge "
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 611,
+    "code": "<button",
+    "context": "{selectedAlert.status !== 'RESOLVED' && ( <button className=\"btn btn-success\" onClick={() => updateStatus(selectedAlert.id, 'RESOLVED')} > Mark as Res"
+  },
+  {
+    "file": "app/(dashboard)/sos-alerts/page.tsx",
+    "line": 619,
+    "code": "<button className=\"btn btn-ghost\" onClick={() => setSelectedAlert(null)}>",
+    "context": "<button className=\"btn btn-ghost\" onClick={() => setSelectedAlert(null)}> Close </button> </div> </div> </div>"
+  },
+  {
+    "file": "app/(dashboard)/notifications/page.tsx",
+    "line": 77,
+    "code": "<button className=\"btn btn-secondary btn-sm\" onClick={markAllRead}>",
+    "context": "<button className=\"btn btn-secondary btn-sm\" onClick={markAllRead}> <CheckCheck size={14} /> Mark All Read </button> </div> <div style={{ display: 'gr"
+  },
+  {
+    "file": "app/(dashboard)/notifications/page.tsx",
+    "line": 104,
+    "code": "<button",
+    "context": "return ( <button type=\"button\" key={item.id} onClick={() => setComposer(c => ({ ...c, recipientRole: item.id }))} className={`btn ${isSelected ? 'btn-"
+  },
+  {
+    "file": "app/(dashboard)/notifications/page.tsx",
+    "line": 141,
+    "code": "<button",
+    "context": "<button type=\"submit\" className=\"btn btn-primary\" style={{ width: '100%', justifyContent: 'center' }} disabled={sending} >"
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 194,
+    "code": "<button className=\"btn btn-secondary btn-sm\" onClick={fetchRequests}>",
+    "context": "</div> <button className=\"btn btn-secondary btn-sm\" onClick={fetchRequests}> <RefreshCw size={14} /> Refresh </button> </div> {/* Filters */}"
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 289,
+    "code": "<button className=\"btn btn-secondary btn-sm\" title=\"Review\" onClick={() => openDetail(req)}>",
+    "context": "<div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}> <button className=\"btn btn-secondary btn-sm\" title=\"Review\" onClick={() => o"
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 292,
+    "code": "<button className=\"btn btn-danger btn-sm\" title=\"Delete\" onClick={() => handleDelete(req)}>",
+    "context": "</button> <button className=\"btn btn-danger btn-sm\" title=\"Delete\" onClick={() => handleDelete(req)}> <Trash2 size={14} /> Delete </button> </div> </t"
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 312,
+    "code": "<button className=\"btn btn-danger btn-sm\" onClick={() => handleDelete(selected)}>",
+    "context": "<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}> <button className=\"btn btn-danger btn-sm\" onClick={() => handleDelete(selected)}> "
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 315,
+    "code": "<button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setSelected(null)}>",
+    "context": "</button> <button className=\"btn btn-ghost btn-icon btn-sm\" onClick={() => setSelected(null)}> <XCircle size={18} /> </button> </div> </div>"
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 384,
+    "code": "<button",
+    "context": "<div style={{ display: 'flex', gap: 8 }}> <button className=\"btn btn-primary btn-sm\" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }} "
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 444,
+    "code": "<button",
+    "context": "<div style={{ display: 'flex', gap: 8 }}> <button className=\"btn btn-primary btn-sm\" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }} "
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 528,
+    "code": "<button",
+    "context": "{/* Approve button */} <button className=\"btn btn-primary\" style={{ width: '100%', marginBottom: 16, justifyContent: 'center', padding: '12px' }} onCl"
+  },
+  {
+    "file": "app/(dashboard)/registration-requests/page.tsx",
+    "line": 550,
+    "code": "<button",
+    "context": "/> <button className=\"btn btn-danger\" style={{ width: '100%', justifyContent: 'center' }} onClick={handleReject} disabled={actionLoading || !rejectRea"
+  },
+  {
+    "file": "app/(dashboard)/settings/page.tsx",
+    "line": 45,
+    "code": "<button type=\"submit\" className=\"btn btn-primary\" disabled={loading} style={{ marginTop: 8 }}>",
+    "context": "</div> <button type=\"submit\" className=\"btn btn-primary\" disabled={loading} style={{ marginTop: 8 }}> {loading ? <><span className=\"spinner\" /> Updati"
+  },
+  {
+    "file": "components/LiveMap.tsx",
+    "line": 482,
+    "code": "<button",
+    "context": "<div style={{ display: 'flex', gap: 4, background: 'rgba(15,23,42,0.9)', backdropFilter: 'blur(8px)', padding: 4, borderRadius: 8, border: '1px solid "
+  },
+  {
+    "file": "components/LiveMap.tsx",
+    "line": 490,
+    "code": "<button",
+    "context": "</button> <button type=\"button\" className={`btn btn-xs ${selectedProviderKey === 'maptiler_dark' ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize: 1"
+  },
+  {
+    "file": "components/LiveMap.tsx",
+    "line": 498,
+    "code": "<button",
+    "context": "</button> <button type=\"button\" className={`btn btn-xs ${selectedProviderKey === 'maptiler_hybrid' ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize:"
+  },
+  {
+    "file": "components/LiveMap.tsx",
+    "line": 506,
+    "code": "<button",
+    "context": "</button> <button type=\"button\" className={`btn btn-xs ${selectedProviderKey === 'maptiler_outdoor' ? 'btn-primary' : 'btn-ghost'}`} style={{ fontSize"
+  },
+  {
+    "file": "components/ResetPasswordModal.tsx",
+    "line": 87,
+    "code": "<button onClick={onClose} className=\"btn btn-ghost btn-icon\">",
+    "context": "</div> <button onClick={onClose} className=\"btn btn-ghost btn-icon\"> <X size={18} /> </button> </div> <form onSubmit={submit}>"
+  },
+  {
+    "file": "components/ResetPasswordModal.tsx",
+    "line": 124,
+    "code": "<button",
+    "context": "/> <button type=\"button\" onClick={() => setShowNew(!showNew)} style={{ position: 'absolute', right: 10,"
+  },
+  {
+    "file": "components/ResetPasswordModal.tsx",
+    "line": 159,
+    "code": "<button",
+    "context": "/> <button type=\"button\" onClick={() => setShowConfirm(!showConfirm)} style={{ position: 'absolute', right: 10,"
+  },
+  {
+    "file": "components/ResetPasswordModal.tsx",
+    "line": 218,
+    "code": "<button type=\"button\" onClick={onClose} className=\"btn btn-secondary\">",
+    "context": "<div className=\"modal-footer\"> <button type=\"button\" onClick={onClose} className=\"btn btn-secondary\"> Cancel </button> <button type=\"submit\" className"
+  },
+  {
+    "file": "components/ResetPasswordModal.tsx",
+    "line": 221,
+    "code": "<button",
+    "context": "</button> <button type=\"submit\" className=\"btn btn-primary\" disabled={saving || !confirmed || !newPassword || newPassword !== confirmPassword} > {savi"
+  },
+  {
+    "file": "components/StopMapPicker.tsx",
+    "line": 211,
+    "code": "<button",
+    "context": "{searchQuery && !isSearching && ( <button type=\"button\" onClick={() => { setSearchQuery(''); setSearchResults([]); setShowDropdown(false);"
+  },
+  {
+    "file": "components/StopMapPicker.tsx",
+    "line": 271,
+    "code": "<button",
+    "context": "<div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}> <button type=\"but"
+  },
+  {
+    "file": "components/StopMapPicker.tsx",
+    "line": 279,
+    "code": "<button",
+    "context": "</button> <button type=\"button\" className={`btn btn-sm ${selectedProviderKey === 'maptiler_dark' ? 'btn-primary' : 'btn-ghost'}`} style={{ padding: '4"
+  },
+  {
+    "file": "components/StopMapPicker.tsx",
+    "line": 287,
+    "code": "<button",
+    "context": "</button> <button type=\"button\" className={`btn btn-sm ${selectedProviderKey === 'maptiler_hybrid' ? 'btn-primary' : 'btn-ghost'}`} style={{ padding: "
+  },
+  {
+    "file": "components/StopMapPicker.tsx",
+    "line": 295,
+    "code": "<button",
+    "context": "</button> <button type=\"button\" className={`btn btn-sm ${selectedProviderKey === 'maptiler_outdoor' ? 'btn-primary' : 'btn-ghost'}`} style={{ padding:"
+  },
+  {
+    "file": "components/StopMapPicker.tsx",
+    "line": 312,
+    "code": "<button",
+    "context": "{PRESETS.map((p) => ( <button key={p.name} type=\"button\" onClick={() => handlePresetSelect(p)} style={{ background: 'var(--bg-card)',"
+  }
+]

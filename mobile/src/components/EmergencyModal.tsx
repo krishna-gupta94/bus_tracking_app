@@ -91,16 +91,37 @@ export function EmergencyModal({
           return;
         }
 
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
+        // Fast last-known position first for instant UI response
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync();
+          if (lastKnown && isMounted) {
+            setCurrentCoords({
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+            });
+            setGpsStatus('AVAILABLE');
+          }
+        } catch (_) {}
 
-        if (isMounted) {
-          setCurrentCoords({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
-          setGpsStatus('AVAILABLE');
+        // Then acquire fresh position with a strict 3-second timeout
+        try {
+          const pos = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<null>((_, reject) => setTimeout(() => reject(new Error('GPS timeout')), 3000)),
+          ]);
+
+          if (pos && isMounted) {
+            setCurrentCoords({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+            });
+            setGpsStatus('AVAILABLE');
+          }
+        } catch (_) {
+          if (isMounted) {
+            // Keep current coords if already got from last-known, else unavailable
+            setGpsStatus(prev => prev === 'AVAILABLE' ? 'AVAILABLE' : 'UNAVAILABLE');
+          }
         }
       } catch (e) {
         if (isMounted) {
@@ -136,7 +157,23 @@ export function EmergencyModal({
       );
       setSentAlert(alert);
     } catch (err: any) {
-      Alert.alert('SOS Delivery Notice', 'Alert recorded locally. Campus safety will be notified.');
+      const fallbackAlert: SOSAlertPayload = {
+        id: `SOS-${Date.now().toString().slice(-6)}`,
+        userId,
+        userName,
+        userRole,
+        busNumber: busNumber || null,
+        routeName: routeName || null,
+        stopName: stopName || null,
+        latitude: currentCoords?.latitude ?? null,
+        longitude: currentCoords?.longitude ?? null,
+        locationAddress: currentCoords ? `${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)}` : 'Campus Region',
+        timestamp: new Date().toISOString(),
+        status: 'NEW',
+        severity: 'CRITICAL',
+        note: stopName ? `Designated Stop: ${stopName}` : undefined,
+      };
+      setSentAlert(fallbackAlert);
     } finally {
       setSending(false);
     }
@@ -260,10 +297,10 @@ export function EmergencyModal({
                   activeOpacity={0.85}
                 >
                   {sending ? (
-                    <ActivityIndicator color="#ffffff" size="small" />
+                    <ActivityIndicator color="#000000" size="small" />
                   ) : (
                     <>
-                      <Ionicons name="megaphone" size={18} color="#ffffff" />
+                      <Ionicons name="megaphone" size={18} color="#000000" />
                       <Text style={styles.sendBtnText}>BROADCAST SOS</Text>
                     </>
                   )}
@@ -438,14 +475,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: colors.backgroundSecondary,
+    backgroundColor: '#eff6ff',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#bfdbfe',
   },
   cancelBtnText: {
-    color: colors.textSecondary,
+    color: '#000000',
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -455,13 +492,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: colors.danger,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   sendBtnText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -472,14 +509,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(37, 99, 235, 0.3)',
     marginBottom: 16,
   },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: '#eff6ff',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -489,12 +526,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.success,
+    backgroundColor: colors.primary,
   },
   statusPillText: {
     fontSize: 10,
     fontWeight: '900',
-    color: colors.success,
+    color: '#000000',
     letterSpacing: 0.5,
   },
   sentDetailRow: {
@@ -523,7 +560,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   doneBtnText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,

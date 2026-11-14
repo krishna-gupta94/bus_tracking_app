@@ -305,14 +305,32 @@ export default function RegistrationRequestsPage() {
       {/* Detail Modal */}
       {selected && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal-content" style={{ maxWidth: 720, width: '95%' }} onClick={e => e.stopPropagation()}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: 980, width: '95%', maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
             <div className="modal-header">
-              <h2 className="modal-title">Registration Request Review</h2>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(selected)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h2 className="modal-title" style={{ margin: 0 }}>Registration Request Review</h2>
+                <span className={getStatusBadge(selected.status).cls} style={{ fontSize: 12, padding: '3px 10px' }}>
+                  {getStatusBadge(selected.status).label}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  className="btn btn-danger btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleDelete(selected)}
+                >
                   <Trash2 size={14} /> Delete
                 </button>
-                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setSelected(null)}>
+                <button
+                  className="btn btn-ghost btn-icon btn-sm"
+                  onClick={() => setSelected(null)}
+                  title="Close modal"
+                >
                   <XCircle size={18} />
                 </button>
               </div>
@@ -321,243 +339,248 @@ export default function RegistrationRequestsPage() {
             {detailLoading ? (
               <div style={{ padding: 48, textAlign: 'center' }}><div className="spinner spinner-md" /></div>
             ) : (
-              <div className="modal-body" style={{ maxHeight: '75vh', overflowY: 'auto', padding: '20px' }}>
-
-                {/* Status banner */}
-                <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>STATUS:</span>
-                    <span className={getStatusBadge(selected.status).cls} style={{ fontSize: 13, padding: '4px 12px' }}>
-                      {getStatusBadge(selected.status).label}
+              <div
+                className="modal-body"
+                style={{
+                  padding: '20px 24px',
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+                  gap: 20,
+                  alignItems: 'start',
+                }}
+              >
+                {/* ── LEFT COLUMN: Student Profile & Decision ── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Status Banner */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      Submitted: <strong>{new Date(selected.createdAt).toLocaleDateString()}</strong>
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      Time: {new Date(selected.createdAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    Submitted on {new Date(selected.createdAt).toLocaleString()}
-                  </div>
-                </div>
 
-                {/* Info grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                  {[
-                    ['Full Name',    selected.name,        <User size={14} />],
-                    ['Student ID',   selected.studentCode, <User size={14} />],
-                    ['Email Address', selected.email,      <Mail size={14} />],
-                    ['Phone Number', selected.phone || '—', null],
-                    ['Course Duration', `${selected.courseStartYear} – ${selected.courseEndYear}`, <Clock size={14} />],
-                    ['Assigned Route', selected.route?.name || '—', <RouteIcon size={14} />],
-                    ['Assigned Bus', selected.bus ? `Bus ${selected.bus.busNumber}` : '—', <Bus size={14} />],
-                    ['Assigned Stop', selected.stop ? `${selected.stop.sequence}. ${selected.stop.name}` : '—', <MapPin size={14} />],
-                  ].map(([label, value, icon]) => (
-                    <div key={label as string} style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '10px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                        {icon as any} {label as string}
+                  {/* Student Info Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {[
+                      ['Full Name', selected.name, <User size={13} />],
+                      ['Student ID', selected.studentCode, <User size={13} />],
+                      ['Email Address', selected.email, <Mail size={13} />],
+                      ['Phone', selected.phone || '—', null],
+                      ['Course Duration', `${selected.courseStartYear} – ${selected.courseEndYear}`, <Clock size={13} />],
+                      ['Assigned Route', selected.route?.name || '—', <RouteIcon size={13} />],
+                      ['Assigned Bus', selected.bus ? `Bus ${selected.bus.busNumber}` : '—', <Bus size={13} />],
+                      ['Assigned Stop', selected.stop ? `${selected.stop.sequence}. ${selected.stop.name}` : '—', <MapPin size={13} />],
+                    ].map(([label, value, icon]) => (
+                      <div key={label as string} style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '9px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, fontWeight: 600 }}>
+                          {icon as any} {label as string}
+                        </div>
+                        <div style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 700 }}>{value as string}</div>
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{value as string}</div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                {/* Uploaded Documents */}
-                <div style={{ marginBottom: 24, padding: '16px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <FileText size={15} color="var(--primary)" /> UPLOADED DOCUMENTS &amp; ELIGIBILITY PROOF
-                  </h4>
-
-                  {(!selected.collegeIdPath && !selected.busSlipPath) ? (
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No documents uploaded for this request.</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {/* College ID Card */}
-                      {selected.collegeIdPath && (
-                        <div style={{ background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                🎓 College ID Card
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                                {selected.collegeIdName || 'college-id.pdf'} {selected.collegeIdSize ? `• ${formatBytes(selected.collegeIdSize)}` : ''}
-                                {selected.collegeIdType ? ` • ${selected.collegeIdType}` : ''}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button
-                                className="btn btn-primary btn-sm"
-                                style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
-                                onClick={() => loadDoc('college-id')}
-                                disabled={fetchingDoc === 'college-id'}
-                              >
-                                {fetchingDoc === 'college-id' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
-                                {docUrls['college-id'] ? 'Refresh Preview' : 'Preview Document'}
-                              </button>
-                              {docUrls['college-id'] && (
-                                <a
-                                  href={docUrls['college-id'].url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}
-                                  title="Open in new tab"
-                                >
-                                  <ExternalLink size={13} /> Full Screen
-                                </a>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Inline Preview for College ID */}
-                          {docUrls['college-id'] && (
-                            <div style={{ borderTop: '1px solid var(--border)', background: '#0f172a', padding: 12, textAlign: 'center' }}>
-                              {(docUrls['college-id'].fileType?.includes('image') ||
-                                /\.(jpe?g|png|webp|heic|gif)$/i.test(docUrls['college-id'].fileName || '')) ? (
-                                <img
-                                  src={docUrls['college-id'].url}
-                                  alt="College ID Preview"
-                                  style={{ maxHeight: 380, maxWidth: '100%', objectFit: 'contain', borderRadius: 6, margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
-                                />
-                              ) : (
-                                <iframe
-                                  src={docUrls['college-id'].url}
-                                  title="College ID PDF"
-                                  style={{ width: '100%', height: 380, border: 'none', borderRadius: 6, backgroundColor: '#fff' }}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Bus Slip / Fee Receipt */}
-                      {selected.busSlipPath && (
-                        <div style={{ background: 'var(--card-bg, #ffffff)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                🚌 Bus Slip / Fee Receipt
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                                {selected.busSlipName || 'bus-slip.pdf'} {selected.busSlipSize ? `• ${formatBytes(selected.busSlipSize)}` : ''}
-                                {selected.busSlipType ? ` • ${selected.busSlipType}` : ''}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button
-                                className="btn btn-primary btn-sm"
-                                style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
-                                onClick={() => loadDoc('bus-slip')}
-                                disabled={fetchingDoc === 'bus-slip'}
-                              >
-                                {fetchingDoc === 'bus-slip' ? <div className="spinner spinner-xs" /> : <Eye size={14} />}
-                                {docUrls['bus-slip'] ? 'Refresh Preview' : 'Preview Document'}
-                              </button>
-                              {docUrls['bus-slip'] && (
-                                <a
-                                  href={docUrls['bus-slip'].url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}
-                                  title="Open in new tab"
-                                >
-                                  <ExternalLink size={13} /> Full Screen
-                                </a>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Inline Preview for Bus Slip */}
-                          {docUrls['bus-slip'] && (
-                            <div style={{ borderTop: '1px solid var(--border)', background: '#0f172a', padding: 12, textAlign: 'center' }}>
-                              {(docUrls['bus-slip'].fileType?.includes('image') ||
-                                /\.(jpe?g|png|webp|heic|gif)$/i.test(docUrls['bus-slip'].fileName || '')) ? (
-                                <img
-                                  src={docUrls['bus-slip'].url}
-                                  alt="Bus Slip Preview"
-                                  style={{ maxHeight: 380, maxWidth: '100%', objectFit: 'contain', borderRadius: 6, margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
-                                />
-                              ) : (
-                                <iframe
-                                  src={docUrls['bus-slip'].url}
-                                  title="Bus Slip PDF"
-                                  style={{ width: '100%', height: 380, border: 'none', borderRadius: 6, backgroundColor: '#fff' }}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                  {/* Approved State Notice */}
+                  {selected.status === 'APPROVED' && (
+                    <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <CheckCircle2 size={16} /> Student Account Active
+                      </div>
+                      <div style={{ fontSize: 12, color: '#15803d', marginTop: 4 }}>
+                        Approved{selected.reviewedAt ? ` on ${new Date(selected.reviewedAt).toLocaleDateString()}` : ''}. The student can sign in immediately.
+                      </div>
                     </div>
                   )}
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>
-                    🔒 Document URLs are generated securely on-demand and valid for 15 minutes.
-                  </p>
+
+                  {/* Rejected State Notice */}
+                  {selected.status === 'REJECTED' && (
+                    <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <XCircle size={16} /> Registration Rejected
+                      </div>
+                      <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
+                        <strong>Reason:</strong> {selected.rejectionReason || 'No specific reason provided.'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Admin Decision Actions */}
+                  {isPending && (
+                    <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 10, border: '1px solid var(--border)', marginTop: 4 }}>
+                      <h4 style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 10 }}>
+                        ADMIN ACTION
+                      </h4>
+
+                      <button
+                        className="btn btn-primary"
+                        style={{ width: '100%', marginBottom: 12, justifyContent: 'center', padding: '10px' }}
+                        onClick={handleApprove}
+                        disabled={actionLoading}
+                      >
+                        {actionLoading ? <div className="spinner spinner-sm" /> : <><CheckCircle2 size={16} /> Approve &amp; Activate Account</>}
+                      </button>
+
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                        <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
+                          Rejection Reason (if rejecting):
+                        </label>
+                        <input
+                          className="form-input"
+                          placeholder="e.g. Invalid bus fee slip, please re-upload…"
+                          value={rejectReason}
+                          onChange={e => setRejectReason(e.target.value)}
+                          style={{ width: '100%', marginBottom: 8, height: 36, fontSize: 12 }}
+                        />
+                        <button
+                          className="btn btn-danger"
+                          style={{ width: '100%', justifyContent: 'center', padding: '9px' }}
+                          onClick={handleReject}
+                          disabled={actionLoading || !rejectReason.trim()}
+                        >
+                          {actionLoading ? <div className="spinner spinner-sm" /> : <><XCircle size={15} /> Reject Request</>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Approved State */}
-                {selected.status === 'APPROVED' && (
-                  <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <CheckCircle2 size={18} /> Student Account Active
-                    </div>
-                    <div style={{ fontSize: 12, color: '#15803d', marginTop: 4 }}>
-                      This registration was approved{selected.reviewedAt ? ` on ${new Date(selected.reviewedAt).toLocaleString()}` : ''}. The student can now log into the Student App directly using their email and chosen password.
-                    </div>
-                  </div>
-                )}
-
-                {/* Rejected State */}
-                {selected.status === 'REJECTED' && (
-                  <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <XCircle size={18} /> Registration Rejected
-                    </div>
-                    <div style={{ fontSize: 13, color: '#b91c1c', marginTop: 4 }}>
-                      <strong>Reason:</strong> {selected.rejectionReason || 'No specific reason provided.'}
-                    </div>
-                  </div>
-                )}
-
-                {/* Review Decision Actions (for pending requests) */}
-                {isPending && (
-                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 14 }}>
-                      ADMIN DECISION
+                {/* ── RIGHT COLUMN: Uploaded Documents & Interactive Viewer ── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: 14, border: '1px solid var(--border)' }}>
+                    <h4 style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FileText size={15} color="var(--primary)" /> ELIGIBILITY PROOF &amp; DOCUMENTS
                     </h4>
 
-                    {/* Approve button */}
-                    <button
-                      className="btn btn-primary"
-                      style={{ width: '100%', marginBottom: 16, justifyContent: 'center', padding: '12px' }}
-                      onClick={handleApprove}
-                      disabled={actionLoading}
-                    >
-                      {actionLoading ? <div className="spinner spinner-sm" /> : <><CheckCircle2 size={16} /> Approve Registration &amp; Activate Account</>}
-                    </button>
+                    {(!selected.collegeIdPath && !selected.busSlipPath) ? (
+                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '16px 0' }}>No documents uploaded for this request.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {/* College ID Card */}
+                        {selected.collegeIdPath && (
+                          <div style={{ background: '#ffffff', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px' }}>
+                              <div>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                  🎓 College ID Card
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  {selected.collegeIdName || 'college-id.pdf'} {selected.collegeIdSize ? `• ${formatBytes(selected.collegeIdSize)}` : ''}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '5px 10px' }}
+                                  onClick={() => loadDoc('college-id')}
+                                  disabled={fetchingDoc === 'college-id'}
+                                >
+                                  {fetchingDoc === 'college-id' ? <div className="spinner spinner-xs" /> : <Eye size={13} />}
+                                  {docUrls['college-id'] ? 'Refresh' : 'Preview'}
+                                </button>
+                                {docUrls['college-id'] && (
+                                  <a
+                                    href={docUrls['college-id'].url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '5px 10px' }}
+                                    title="Open in new tab"
+                                  >
+                                    <ExternalLink size={12} /> Tab
+                                  </a>
+                                )}
+                              </div>
+                            </div>
 
-                    {/* Reject section */}
-                    <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                        Rejection Reason (if rejecting):
-                      </label>
-                      <textarea
-                        className="form-input"
-                        rows={2}
-                        placeholder="e.g. Invalid bus fee receipt uploaded, please submit official receipt…"
-                        value={rejectReason}
-                        onChange={e => setRejectReason(e.target.value)}
-                        style={{ width: '100%', marginBottom: 10, resize: 'vertical' }}
-                      />
-                      <button
-                        className="btn btn-danger"
-                        style={{ width: '100%', justifyContent: 'center' }}
-                        onClick={handleReject}
-                        disabled={actionLoading || !rejectReason.trim()}
-                      >
-                        {actionLoading ? <div className="spinner spinner-sm" /> : <><XCircle size={15} /> Reject Registration</>}
-                      </button>
-                    </div>
+                            {docUrls['college-id'] && (
+                              <div style={{ borderTop: '1px solid var(--border)', background: '#f8fafc', padding: 8, textAlign: 'center' }}>
+                                {(docUrls['college-id'].fileType?.includes('image') ||
+                                  /\.(jpe?g|png|webp|heic|gif)$/i.test(docUrls['college-id'].fileName || '')) ? (
+                                  <img
+                                    src={docUrls['college-id'].url}
+                                    alt="College ID Preview"
+                                    style={{ maxHeight: 240, maxWidth: '100%', objectFit: 'contain', borderRadius: 4, margin: '0 auto' }}
+                                  />
+                                ) : (
+                                  <iframe
+                                    src={docUrls['college-id'].url}
+                                    title="College ID PDF"
+                                    style={{ width: '100%', height: 240, border: 'none', borderRadius: 4, backgroundColor: '#fff' }}
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Bus Slip / Fee Receipt */}
+                        {selected.busSlipPath && (
+                          <div style={{ background: '#ffffff', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px' }}>
+                              <div>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                  🚌 Bus Fee Slip / Receipt
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  {selected.busSlipName || 'bus-slip.pdf'} {selected.busSlipSize ? `• ${formatBytes(selected.busSlipSize)}` : ''}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '5px 10px' }}
+                                  onClick={() => loadDoc('bus-slip')}
+                                  disabled={fetchingDoc === 'bus-slip'}
+                                >
+                                  {fetchingDoc === 'bus-slip' ? <div className="spinner spinner-xs" /> : <Eye size={13} />}
+                                  {docUrls['bus-slip'] ? 'Refresh' : 'Preview'}
+                                </button>
+                                {docUrls['bus-slip'] && (
+                                  <a
+                                    href={docUrls['bus-slip'].url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '5px 10px' }}
+                                    title="Open in new tab"
+                                  >
+                                    <ExternalLink size={12} /> Tab
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+
+                            {docUrls['bus-slip'] && (
+                              <div style={{ borderTop: '1px solid var(--border)', background: '#f8fafc', padding: 8, textAlign: 'center' }}>
+                                {(docUrls['bus-slip'].fileType?.includes('image') ||
+                                  /\.(jpe?g|png|webp|heic|gif)$/i.test(docUrls['bus-slip'].fileName || '')) ? (
+                                  <img
+                                    src={docUrls['bus-slip'].url}
+                                    alt="Bus Slip Preview"
+                                    style={{ maxHeight: 240, maxWidth: '100%', objectFit: 'contain', borderRadius: 4, margin: '0 auto' }}
+                                  />
+                                ) : (
+                                  <iframe
+                                    src={docUrls['bus-slip'].url}
+                                    title="Bus Slip PDF"
+                                    style={{ width: '100%', height: 240, border: 'none', borderRadius: 4, backgroundColor: '#fff' }}
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, marginBottom: 0 }}>
+                      🔒 Document links expire in 15 minutes for campus data security.
+                    </p>
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>

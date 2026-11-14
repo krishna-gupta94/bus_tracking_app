@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback, Fragment } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import '@/lib/leaflet-fix';
@@ -126,7 +126,7 @@ export default function LiveMap() {
   const [liveLocations, setLiveLocations] = useState<Map<string, BusLocation>>(new Map());
   const [liveEtas, setLiveEtas] = useState<Map<string, any>>(new Map());
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
-  const [selectedProviderKey, setSelectedProviderKey] = useState<string>('maptiler_streets');
+  const [selectedProviderKey, setSelectedProviderKey] = useState<string>('carto_voyager');
   const [targetFly, setTargetFly] = useState<[number, number] | null>(null);
   const [connected, setConnected] = useState(false);
   const [search, setSearch] = useState('');
@@ -139,7 +139,7 @@ export default function LiveMap() {
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const defaultCenter: [number, number] = [28.2924, 79.4940]; // Invertis University, Bareilly
-  const activeProvider = MAP_PROVIDERS[selectedProviderKey] || MAP_PROVIDERS.maptiler_streets;
+  const activeProvider = MAP_PROVIDERS[selectedProviderKey] || MAP_PROVIDERS.carto_voyager || MAP_PROVIDERS.maptiler_streets;
 
   const fetchTrips = useCallback(async () => {
     try {
@@ -148,32 +148,35 @@ export default function LiveMap() {
       setTrips(activeTrips);
 
       const locMap = new Map<string, BusLocation>();
-      const etaMap = new Map<string, any>();
 
-      await Promise.all(
-        activeTrips.map(async (t) => {
-          if (t.locations && t.locations.length > 0) {
-            const last = t.locations[t.locations.length - 1];
-            locMap.set(t.bus.id, {
-              busId: t.bus.id,
-              latitude: last.latitude,
-              longitude: last.longitude,
-              timestamp: last.timestamp || new Date().toISOString(),
-              tripId: t.id,
-            });
-          }
-
-          try {
-            const etaRes = await api.get(`/buses/${t.bus.id}/eta`);
-            if (etaRes.data.data) {
-              etaMap.set(t.bus.id, etaRes.data.data);
-            }
-          } catch (e) {}
-        })
-      );
+      // Extract coordinates instantly so the map renders without waiting for external requests
+      for (const t of activeTrips) {
+        if (t.locations && t.locations.length > 0) {
+          const last = t.locations[t.locations.length - 1];
+          locMap.set(t.bus.id, {
+            busId: t.bus.id,
+            latitude: last.latitude,
+            longitude: last.longitude,
+            timestamp: last.timestamp || new Date().toISOString(),
+            tripId: t.id,
+          });
+        }
+      }
 
       setLiveLocations(locMap);
-      setLiveEtas(etaMap);
+
+      // Fetch ETAs non-blocking in background
+      Promise.all(
+        activeTrips.map(t =>
+          api.get(`/buses/${t.bus.id}/eta`)
+            .then(etaRes => {
+              if (etaRes.data?.data) {
+                setLiveEtas(prev => new Map(prev).set(t.bus.id, etaRes.data.data));
+              }
+            })
+            .catch(() => {})
+        )
+      );
     } catch (err) {
       console.error('Failed to load trips:', err);
     }
@@ -183,12 +186,16 @@ export default function LiveMap() {
     fetchTrips();
 
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-    const socket = io(socketUrl, { transports: ['websocket', 'polling'] });
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      auth: { token: token || '' },
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       setConnected(true);
-      socket.emit('join:admin');
+      socket.emit('join:admin', { token });
     });
     socket.on('disconnect', () => setConnected(false));
 
@@ -197,6 +204,18 @@ export default function LiveMap() {
         const next = new Map(prev);
         next.set(loc.busId, loc);
         return next;
+      });
+      setTrips((prevTrips) => {
+        if (!prevTrips.some((t) => t.bus.id === loc.busId)) {
+          fetchTrips();
+        }
+        return prevTrips;
+      });
+      setTargetFly((prevTarget) => {
+        if (!prevTarget) {
+          return [loc.latitude, loc.longitude];
+        }
+        return prevTarget;
       });
     });
 
@@ -213,7 +232,10 @@ export default function LiveMap() {
     socket.on('trip:started', () => fetchTrips());
     socket.on('trip:ended', () => fetchTrips());
 
+    const pollTimer = setInterval(fetchTrips, 8000);
+
     return () => {
+      clearInterval(pollTimer);
       socket.disconnect();
     };
   }, [fetchTrips]);
@@ -522,7 +544,7 @@ export default function LiveMap() {
             const polyCoords = sortedStops.map((s) => [s.latitude, s.longitude] as [number, number]);
 
             return (
-              <div key={trip.id}>
+              <Fragment key={trip.id}>
                 {polyCoords.length > 1 && (
                   <Polyline
                     positions={polyCoords}
@@ -545,7 +567,7 @@ export default function LiveMap() {
                     </Popup>
                   </Marker>
                 ))}
-              </div>
+              </Fragment>
             );
           })}
 
@@ -556,7 +578,7 @@ export default function LiveMap() {
             const isSelected = selectedBusId === busId;
 
             return (
-              <div key={busId}>
+              <Fragment key={busId}>
                 <Circle
                   center={[loc.latitude, loc.longitude]}
                   radius={80}
@@ -616,7 +638,7 @@ export default function LiveMap() {
                     </div>
                   </Popup>
                 </Marker>
-              </div>
+              </Fragment>
             );
           })}
         </MapContainer>

@@ -55,7 +55,7 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
 
   return (
     <View style={styles.splashContainer}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Animated.View
         style={[
           styles.splashContent,
@@ -122,7 +122,7 @@ function RootLayoutNav() {
 
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerShown: false,

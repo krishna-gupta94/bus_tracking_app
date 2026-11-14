@@ -7,16 +7,23 @@ import { Server as SocketServer } from 'socket.io';
 let io: SocketServer | null = null;
 export const setSocketServer = (socketIo: SocketServer) => { io = socketIo; };
 
-const tripInclude = {
+const tripTableInclude = {
   bus: { select: { id: true, busNumber: true, registrationNumber: true } },
   driver: { include: { user: { select: { name: true, email: true } } } },
+  route: { select: { id: true, name: true } },
+};
+
+const tripDetailInclude = {
+  bus: { select: { id: true, busNumber: true, registrationNumber: true, capacity: true } },
+  driver: { include: { user: { select: { name: true, email: true, phone: true } } } },
   route: { include: { stops: { orderBy: { sequence: 'asc' as const } } } },
   locations: { orderBy: { timestamp: 'desc' as const }, take: 1 },
 };
 
 export const getTrips = async (req: AuthRequest, res: Response): Promise<void> => {
   const { status, page = '1', limit = '20' } = req.query as Record<string, string>;
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const parsedLimit = Math.min(parseInt(limit) || 20, 100);
+  const skip = ((parseInt(page) || 1) - 1) * parsedLimit;
   const where: any = {};
   if (status) where.status = status;
 
@@ -27,17 +34,23 @@ export const getTrips = async (req: AuthRequest, res: Response): Promise<void> =
   }
 
   const [trips, total] = await Promise.all([
-    prisma.trip.findMany({ where, include: tripInclude, skip, take: parseInt(limit), orderBy: { startTime: 'desc' } }),
+    prisma.trip.findMany({
+      where,
+      include: tripTableInclude,
+      skip,
+      take: parsedLimit,
+      orderBy: { startTime: 'desc' },
+    }),
     prisma.trip.count({ where }),
   ]);
 
-  res.json({ success: true, data: trips, meta: { total, page: parseInt(page), limit: parseInt(limit) } });
+  res.json({ success: true, data: trips, meta: { total, page: parseInt(page) || 1, limit: parsedLimit } });
 };
 
 export const getActiveTrips = async (req: AuthRequest, res: Response): Promise<void> => {
   const trips = await prisma.trip.findMany({
     where: { status: 'ACTIVE' },
-    include: tripInclude,
+    include: tripDetailInclude,
   });
   res.json({ success: true, data: trips });
 };

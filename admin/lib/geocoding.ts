@@ -198,6 +198,22 @@ export interface MapTileProvider {
 }
 
 export const MAP_PROVIDERS: Record<string, MapTileProvider> = {
+  carto_voyager: {
+    id: 'carto_voyager',
+    name: 'Carto Voyager (Fast CDN)',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 20,
+    subdomains: ['a', 'b', 'c', 'd'],
+  },
+  osm_standard: {
+    id: 'osm_standard',
+    name: 'OpenStreetMap (Fast)',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+    subdomains: ['a', 'b', 'c'],
+  },
   maptiler_streets: {
     id: 'maptiler_streets',
     name: 'MapTiler Streets v2',

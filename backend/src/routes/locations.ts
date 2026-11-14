@@ -6,6 +6,7 @@ const router = Router();
 router.use(authenticate);
 
 router.post('/update', requireRole('DRIVER'), updateLocation);
+router.post('/', requireRole('DRIVER'), updateLocation);
 router.get('/bus/:busId', getLatestLocation);
 router.get('/trip/:tripId', getTripLocations);
 

@@ -85,14 +85,15 @@ export default function SOSAlertsPage() {
     loadAlerts();
 
     // Real-time Socket.IO connection
+    const storedToken = (typeof window !== 'undefined' ? localStorage.getItem('token') : '') || token || '';
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
-      auth: { token: token ?? '' },
+      auth: { token: storedToken },
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      socket.emit('join:admin');
+      socket.emit('join:admin', { token: storedToken });
     });
 
     socket.on('sos:trigger', (newSOS: any) => {

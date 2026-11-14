@@ -60,17 +60,15 @@ export default function StudentTrackingScreen() {
     return [...rawStops].sort((a: any, b: any) => a.sequence - b.sequence);
   }, [routeDiscovery?.assignedRoute?.stops, route?.stops]);
 
-  // Tick clock every 3s to keep "X seconds ago" fresh
+  // Tick clock every 10s to keep "X seconds ago" fresh without excessive re-renders
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 3000);
+    const timer = setInterval(() => setCurrentTime(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
 
   // Load all active buses on student's route
   const loadRouteData = useCallback(async () => {
     try {
-      await refreshUserData();
-
       const [etaRes, boardingRes] = await Promise.all([
         mobileApi.get('/buses/eta/my-stop').catch(() => ({ data: { data: null } })),
         mobileApi.get('/boarding/my-status').catch(() => ({ data: { data: null } })),
@@ -87,7 +85,7 @@ export default function StudentTrackingScreen() {
     } finally {
       setLoading(false);
     }
-  }, [refreshUserData]);
+  }, []);
 
   // Real-time Socket.IO Connection (Subscribes to student's route room)
   useEffect(() => {
@@ -209,7 +207,7 @@ export default function StudentTrackingScreen() {
       clearInterval(interval);
       socket.disconnect();
     };
-  }, [route?.id, user?.id, loadRouteData, serverUrl]);
+  }, [route?.id, user?.id, serverUrl, token]);
 
   const activeBuses = routeDiscovery?.sortedBuses || [];
   const selectedBus = activeBuses[selectedBusIndex] || activeBuses[0] || null;
@@ -471,6 +469,7 @@ export default function StudentTrackingScreen() {
         latitude={userLocation?.latitude ?? null}
         longitude={userLocation?.longitude ?? null}
         stopName={assignedStop?.name || null}
+        socket={socketRef.current}
       />
     </SafeAreaView>
   );
@@ -508,7 +507,7 @@ const styles = StyleSheet.create({
     maxWidth: '70%',
   },
   routePillText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -516,11 +515,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    backgroundColor: '#eff6ff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#bfdbfe',
   },
   proximityAlert: {
     position: 'absolute',
@@ -537,7 +536,7 @@ const styles = StyleSheet.create({
   },
   proximityText: {
     flex: 1,
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -589,7 +588,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   busTabTextActive: {
-    color: '#ffffff',
+    color: '#000000',
   },
   busTabEta: {
     fontSize: 11,

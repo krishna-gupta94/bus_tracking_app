@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { MAPTILER_API_KEY } from '../config/maptiler';
@@ -82,14 +82,14 @@ export const MapTilerView = forwardRef<MapTilerViewRef, MapTilerViewProps>(
       stops[0]?.longitude ||
       79.4304;
 
-    const htmlContent = `
+    const htmlContent = useMemo(() => `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     html, body, #map {
@@ -427,7 +427,7 @@ export const MapTilerView = forwardRef<MapTilerViewRef, MapTilerViewProps>(
   </script>
 </body>
 </html>
-    `;
+    `, []);
 
     const sendToWebview = useCallback((jsCode: string) => {
       if (webViewRef.current && isReadyRef.current) {

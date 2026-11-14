@@ -81,7 +81,7 @@ export default function StudentHomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [refreshUserData]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -214,7 +214,7 @@ export default function StudentHomeScreen() {
       clearInterval(interval);
       socket.disconnect();
     };
-  }, [route?.id, user?.id, loadData, serverUrl]);
+  }, [route?.id, user?.id, serverUrl, token]);
 
   // Send temporary location ping if boarding monitoring is active
   useEffect(() => {
@@ -500,13 +500,13 @@ export default function StudentHomeScreen() {
           activeOpacity={0.85}
         >
           <View style={styles.sosIconCircle}>
-            <Ionicons name="alert" size={20} color="#ffffff" />
+            <Ionicons name="alert" size={20} color="#000000" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.sosTitle}>EMERGENCY / SOS DISPATCH</Text>
             <Text style={styles.sosSubtitle}>Instant alert to campus safety & dispatch center</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+          <Ionicons name="chevron-forward" size={18} color="#000000" />
         </TouchableOpacity>
 
         {/* ROUTE & ASSIGNED STOP IDENTITY CARD */}
@@ -590,7 +590,7 @@ export default function StudentHomeScreen() {
                   <View style={styles.busCardTop}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                       <View style={[styles.busNumberPill, isFirst && { backgroundColor: colors.primary }]}>
-                        <Text style={[styles.busNumberPillText, isFirst && { color: '#ffffff' }]}>
+                        <Text style={[styles.busNumberPillText, isFirst && { color: '#000000' }]}>
                           BUS {busItem.busNumber}
                         </Text>
                       </View>
@@ -715,6 +715,7 @@ export default function StudentHomeScreen() {
         latitude={userLocation?.latitude ?? null}
         longitude={userLocation?.longitude ?? null}
         stopName={stop?.name || null}
+        socket={socketRef.current}
       />
 
       {boardingPrompt && (
@@ -777,7 +778,7 @@ const styles = StyleSheet.create({
   emergencyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.danger,
+    backgroundColor: colors.primary,
     borderRadius: 16,
     padding: 14,
     marginBottom: 16,
@@ -787,19 +788,19 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   sosTitle: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#ffffff',
+    color: '#000000',
     letterSpacing: 0.5,
   },
   sosSubtitle: {
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: '#1e293b',
     marginTop: 2,
   },
   routeHeaderCard: {
@@ -1041,7 +1042,7 @@ const styles = StyleSheet.create({
   trackBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#ffffff',
+    color: '#000000',
     letterSpacing: 0.5,
   },
   grid: {

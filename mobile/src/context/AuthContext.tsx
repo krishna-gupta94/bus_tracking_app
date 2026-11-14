@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mobileApi, setCustomApiUrl, DEFAULT_URL } from '../services/api';
 
@@ -38,16 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadStoredSession = async () => {
     try {
-      const storedUrl = await AsyncStorage.getItem('server_url');
-      if (storedUrl) {
-        setServerUrl(storedUrl);
-        setCustomApiUrl(storedUrl);
-      } else {
-        // No custom URL stored — persist DEFAULT_URL so the background location task
-        // (which cannot access Constants.expoConfig at runtime) always has a valid API URL.
-        setCustomApiUrl(DEFAULT_URL);
-        await AsyncStorage.setItem('server_url', DEFAULT_URL);
-      }
+      // Always ensure the active API URL is updated to the current live DEFAULT_URL
+      // This prevents stale IP addresses stored in device storage from causing network timeouts
+      const targetUrl = DEFAULT_URL;
+      setServerUrl(targetUrl);
+      setCustomApiUrl(targetUrl);
+      await AsyncStorage.setItem('server_url', targetUrl);
       const savedToken = await AsyncStorage.getItem('user_token');
       const savedUser = await AsyncStorage.getItem('user_data');
       if (savedToken && savedUser) {

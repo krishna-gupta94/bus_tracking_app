@@ -7,6 +7,10 @@ import Constants from 'expo-constants';
 // 1. If running in Expo Go / Metro, extract host IP (e.g. 192.168.x.x) from Constants.expoConfig
 // 2. Otherwise fallback to 10.0.2.2 (Android Emulator) or localhost (iOS/Web)
 const getAutoDetectedUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    const u = process.env.EXPO_PUBLIC_API_URL;
+    return u.endsWith('/api') ? u : u + '/api';
+  }
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const hostIp = hostUri.split(':')[0];
@@ -28,7 +32,7 @@ export const setCustomApiUrl = (url: string) => {
 export const mobileApi = axios.create({
   baseURL: BASE_API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 12000,
+  timeout: 5000,
 });
 
 mobileApi.interceptors.request.use(async (config) => {

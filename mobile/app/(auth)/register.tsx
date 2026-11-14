@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView,
-  Platform, Modal,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +26,7 @@ interface StopItem  { id: string; name: string; sequence: number; address?: stri
 interface DocFile   { uri: string; mimeType: string; name: string; }
 
 // ─── Step headers ─────────────────────────────────────────────────────────────
-const STEPS = ['Personal Info', 'Course Years', 'Route & Bus', 'Documents', 'Review'];
+const STEPS = ['Personal', 'Course', 'Route & Bus', 'Documents', 'Review'];
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -34,10 +34,9 @@ export default function RegisterScreen() {
 
   // Multi-step
   const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Step 1: Personal Info & Password
+  // Step 0: Personal Info & Password
   const [name, setName] = useState('');
   const [studentCode, setStudentCode] = useState('');
   const [email, setEmail] = useState('');
@@ -46,25 +45,25 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Step 2: Course Years
+  // Step 1: Course Years
   const [courseStartYear, setCourseStartYear] = useState('');
   const [courseEndYear, setCourseEndYear] = useState('');
 
-  // Step 3: Route / Bus / Stop
+  // Step 2: Route / Bus / Stop
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [buses, setBuses] = useState<BusItem[]>([]);
   const [stops, setStops] = useState<StopItem[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteItem | null>(null);
   const [selectedBus, setSelectedBus]     = useState<BusItem | null>(null);
   const [selectedStop, setSelectedStop]   = useState<StopItem | null>(null);
-  const [routeLoading, setRouteLoading] = useState(false);
-  const [routeError, setRouteError] = useState<string | null>(null);
-  const [busLoading, setBusLoading] = useState(false);
-  const [stopLoading, setStopLoading] = useState(false);
+  const [routeLoading, setRouteLoading]   = useState(false);
+  const [routeError, setRouteError]       = useState<string | null>(null);
+  const [busLoading, setBusLoading]       = useState(false);
+  const [stopLoading, setStopLoading]     = useState(false);
 
-  // Step 4: Documents
+  // Step 3: Documents
   const [collegeId, setCollegeId] = useState<DocFile | null>(null);
-  const [busSlip, setBusSlip] = useState<DocFile | null>(null);
+  const [busSlip, setBusSlip]     = useState<DocFile | null>(null);
 
   // ── Validation per step ───────────────────────────────────────────────────
   const canProceed: Record<number, boolean> = {
@@ -82,30 +81,26 @@ export default function RegisterScreen() {
 
   // ── Load routes when entering step 2 (Route & Bus) ──────────────────────
   const loadRoutes = useCallback(async (force = false) => {
-    if (!force && routes.length > 0) return; // already cached
+    if (!force && routes.length > 0) return;
     setRouteLoading(true);
     setRouteError(null);
     try {
-      console.log('[Register] Loading public routes from:', serverUrl);
       const data = await getPublicRoutes(serverUrl);
-      console.log('[Register] Routes loaded:', data.length, data);
       setRoutes(data);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Could not load routes.';
-      console.error('[Register] Route load error:', err);
       setRouteError(msg);
-      Alert.alert('Error', `Could not load routes. Check your connection.\n\n${msg}`);
+      Alert.alert('Error', `Could not load routes.\n\n${msg}`);
     } finally {
       setRouteLoading(false);
     }
-  }, [serverUrl]); // routes.length intentionally omitted — using force param instead
+  }, [serverUrl, routes.length]);
 
-  // Automatically load routes as soon as user reaches step 2
   useEffect(() => {
     if (step === 2) {
       loadRoutes();
     }
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, loadRoutes]);
 
   const handleSelectRoute = async (route: RouteItem) => {
     setSelectedRoute(route);
@@ -116,26 +111,23 @@ export default function RegisterScreen() {
     setBusLoading(true);
     setStopLoading(true);
     try {
-      console.log('[Register] Loading buses/stops for route:', route.id);
       const [busData, stopData] = await Promise.all([
         getBusesForRoute(serverUrl, route.id),
         getStopsForRoute(serverUrl, route.id),
       ]);
-      console.log('[Register] Buses:', busData.length, 'Stops:', stopData.length);
       setBuses(busData);
       setStops(stopData);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Could not load buses/stops.';
-      console.error('[Register] Bus/stop load error:', err);
-      Alert.alert('Error', `Could not load buses/stops for this route.\n\n${msg}`);
+      Alert.alert('Error', `Could not load transit stops for this route.\n\n${msg}`);
     } finally {
       setBusLoading(false);
       setStopLoading(false);
     }
   };
 
-  const goNext = () => setStep(s => s + 1);
-  const goBack = () => setStep(s => s - 1);
+  const goNext = () => setStep(s => Math.min(s + 1, 4));
+  const goBack = () => setStep(s => Math.max(s - 1, 0));
 
   // ── Document picking ──────────────────────────────────────────────────────
   const pickDocument = async (setter: (f: DocFile) => void) => {
@@ -171,7 +163,6 @@ export default function RegisterScreen() {
     if (!selectedRoute || !selectedBus || !selectedStop || !collegeId || !busSlip) return;
     setSubmitting(true);
     try {
-      // 1. Submit registration with password (status = PENDING)
       const { requestId } = await submitRegistration(serverUrl, {
         name: name.trim(),
         studentCode: studentCode.trim(),
@@ -185,18 +176,16 @@ export default function RegisterScreen() {
         stopId: selectedStop.id,
       });
 
-      // 2. Upload documents
       await Promise.all([
         uploadDoc(serverUrl, requestId, 'college-id', collegeId.uri, collegeId.mimeType),
         uploadDoc(serverUrl, requestId, 'bus-slip', busSlip.uri, busSlip.mimeType),
       ]);
 
-      // 3. Store requestId
       await AsyncStorage.setItem('registrationRequestId', requestId);
 
       Alert.alert(
         'Registration Submitted! 🎉',
-        `Your registration request has been submitted for administrator review.\n\nOnce approved by the college transport office, you can log in directly using your email and password.`,
+        `Your student registration request has been submitted for administrator review.\n\nOnce approved, you can log in directly using your email and password.`,
         [{ text: 'Go to Login', onPress: () => router.replace('/(auth)/login') }]
       );
     } catch (err: any) {
@@ -207,273 +196,502 @@ export default function RegisterScreen() {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => step === 0 ? router.back() : goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* ── Compact Top Bar ── */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={() => step === 0 ? router.back() : goBack()}
+          style={styles.backCircleBtn}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="arrow-back" size={20} color="#000000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Student Account</Text>
+        <Text style={styles.topBarTitle}>Student Registration</Text>
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Progress */}
-      <View style={styles.progressRow}>
-        {STEPS.map((s, i) => (
-          <View key={i} style={styles.stepWrapper}>
-            <View style={[styles.stepDot, i < step && styles.stepDotDone, i === step && styles.stepDotActive]}>
-              {i < step
-                ? <Ionicons name="checkmark" size={10} color="#fff" />
-                : <Text style={[styles.stepNum, i === step && { color: '#fff' }]}>{i + 1}</Text>}
-            </View>
-            {i < STEPS.length - 1 && <View style={[styles.stepLine, i < step && styles.stepLineDone]} />}
-          </View>
-        ))}
+      {/* ── Compact Step Progress (No vertical bloat) ── */}
+      <View style={styles.stepperContainer}>
+        <View style={styles.stepperRow}>
+          {STEPS.map((stepName, i) => {
+            const isCompleted = i < step;
+            const isCurrent = i === step;
+            return (
+              <React.Fragment key={i}>
+                <View style={[
+                  styles.stepBubble,
+                  isCompleted && styles.stepBubbleDone,
+                  isCurrent && styles.stepBubbleActive
+                ]}>
+                  {isCompleted ? (
+                    <Ionicons name="checkmark" size={12} color="#000000" />
+                  ) : (
+                    <Text style={[styles.stepBubbleText, isCurrent && styles.stepBubbleTextActive]}>
+                      {i + 1}
+                    </Text>
+                  )}
+                </View>
+                {i < STEPS.length - 1 && (
+                  <View style={[styles.stepConnector, isCompleted && styles.stepConnectorDone]} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </View>
+        <Text style={styles.stepCurrentTitle}>
+          Step {step + 1} of 5: <Text style={styles.stepCurrentName}>{STEPS[step]}</Text>
+        </Text>
       </View>
-      <Text style={styles.stepLabel}>{STEPS[step]}</Text>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-
-        {/* Step 0: Personal Info & Password */}
+      {/* ── Scrollable Body with strict height management ── */}
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* ── STEP 0: Personal Details & Password ── */}
         {step === 0 && (
-          <View>
-            <Field label="Full Name *" value={name} onChange={setName} placeholder="e.g. Krishna Gupta" />
-            <Field label="Student ID / Code *" value={studentCode} onChange={setStudentCode}
-              placeholder="e.g. STU2024001" autoCapitalize="characters" />
-            <Field label="Email Address *" value={email} onChange={setEmail}
-              placeholder="student@college.edu" keyboardType="email-address" autoCapitalize="none" />
-            <Field label="Phone Number" value={phone} onChange={setPhone}
-              placeholder="+91 9876543210" keyboardType="phone-pad" />
-            
-            <Field
-              label="Password *"
-              value={password}
-              onChange={setPassword}
-              placeholder="Min 6 characters"
-              secureTextEntry={!showPassword}
-              rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-              }
+          <View style={styles.stepForm}>
+            {/* Row 1: Full Name */}
+            <CompactField
+              label="Full Name *"
+              value={name}
+              onChange={setName}
+              placeholder="e.g. Rahul Sharma"
+              autoCapitalize="words"
             />
-            <Field
-              label="Confirm Password *"
-              value={confirmPassword}
-              onChange={setConfirmPassword}
-              placeholder="Re-enter password"
-              secureTextEntry={!showPassword}
+
+            {/* Row 2: Student ID and Phone in 2-Column Grid */}
+            <View style={styles.rowTwo}>
+              <View style={styles.col}>
+                <CompactField
+                  label="Student ID *"
+                  value={studentCode}
+                  onChange={setStudentCode}
+                  placeholder="e.g. STU2025"
+                  autoCapitalize="characters"
+                />
+              </View>
+              <View style={styles.col}>
+                <CompactField
+                  label="Phone Number"
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder="+91 9876543210"
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+
+            {/* Row 3: Email Address */}
+            <CompactField
+              label="Email Address *"
+              value={email}
+              onChange={setEmail}
+              placeholder="student@college.edu"
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
+
+            {/* Row 4: Password & Confirm Password side-by-side */}
+            <View style={styles.rowTwo}>
+              <View style={styles.col}>
+                <CompactField
+                  label="Password (min 6) *"
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="Password"
+                  secureTextEntry={!showPassword}
+                  rightIcon={
+                    <TouchableOpacity onPress={() => setShowPassword(p => !p)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={16} color="#000000" />
+                    </TouchableOpacity>
+                  }
+                />
+              </View>
+              <View style={styles.col}>
+                <CompactField
+                  label="Confirm Password *"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  placeholder="Re-enter"
+                  secureTextEntry={!showPassword}
+                />
+              </View>
+            </View>
+
             {password && confirmPassword && password !== confirmPassword && (
-              <Text style={styles.errorText}>Passwords do not match</Text>
-            )}
-
-            <Text style={styles.hint}>
-              🔒 Create a password to log into your account once your registration is approved by the admin.
-            </Text>
-          </View>
-        )}
-
-        {/* Step 1: Course Years */}
-        {step === 1 && (
-          <View>
-            <Field label="Course Start Year *" value={courseStartYear} onChange={setCourseStartYear}
-              placeholder="e.g. 2022" keyboardType="numeric" maxLength={4} />
-            <Field label="Course End Year *" value={courseEndYear} onChange={setCourseEndYear}
-              placeholder="e.g. 2026" keyboardType="numeric" maxLength={4} />
-            {courseStartYear && courseEndYear && parseInt(courseEndYear) < parseInt(courseStartYear) && (
-              <Text style={styles.errorText}>End year cannot be before start year</Text>
-            )}
-          </View>
-        )}
-
-        {/* Step 2: Route / Bus / Stop */}
-        {step === 2 && (
-          <View>
-            <Text style={styles.fieldLabel}>Select Route *</Text>
-            {routeLoading && (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color={colors.primary} />
-                <Text style={styles.loadingText}>Loading routes…</Text>
+              <View style={styles.validationBadge}>
+                <Ionicons name="alert-circle" size={14} color="#dc2626" />
+                <Text style={styles.validationText}>Passwords do not match</Text>
               </View>
             )}
-            {!routeLoading && routeError && (
-              <View style={styles.errorBox}>
-                <Ionicons name="warning-outline" size={16} color="#ef4444" />
-                <Text style={styles.errorBoxText}>{routeError}</Text>
-                <TouchableOpacity onPress={() => loadRoutes(true)} style={styles.retryBtn}>
-                  <Text style={styles.retryBtnText}>Retry</Text>
+
+            <View style={styles.infoBadge}>
+              <Ionicons name="shield-checkmark" size={14} color="#2563eb" />
+              <Text style={styles.infoBadgeText}>
+                Use your email & password to sign in once admin approves your request.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── STEP 1: Academic Years ── */}
+        {step === 1 && (
+          <View style={styles.stepForm}>
+            <Text style={styles.sectionSubtitle}>Specify your college enrollment duration:</Text>
+            <View style={styles.rowTwo}>
+              <View style={styles.col}>
+                <CompactField
+                  label="Course Start Year *"
+                  value={courseStartYear}
+                  onChange={setCourseStartYear}
+                  placeholder="e.g. 2023"
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+              </View>
+              <View style={styles.col}>
+                <CompactField
+                  label="Course End Year *"
+                  value={courseEndYear}
+                  onChange={setCourseEndYear}
+                  placeholder="e.g. 2027"
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+              </View>
+            </View>
+
+            {courseStartYear && courseEndYear && parseInt(courseEndYear) < parseInt(courseStartYear) && (
+              <View style={styles.validationBadge}>
+                <Ionicons name="alert-circle" size={14} color="#dc2626" />
+                <Text style={styles.validationText}>End year cannot be before start year</Text>
+              </View>
+            )}
+
+            <View style={styles.infoBadge}>
+              <Ionicons name="school-outline" size={15} color="#2563eb" />
+              <Text style={styles.infoBadgeText}>
+                Bus pass validity is tied to your active academic course years.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── STEP 2: Route, Bus & Stop Selection ── */}
+        {step === 2 && (
+          <View style={styles.stepForm}>
+            <Text style={styles.stepFieldHeader}>1. Select Bus Route *</Text>
+            {routeLoading && (
+              <View style={styles.loaderInline}>
+                <ActivityIndicator size="small" color="#2563eb" />
+                <Text style={styles.loaderInlineText}>Fetching active routes…</Text>
+              </View>
+            )}
+
+            {routeError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{routeError}</Text>
+                <TouchableOpacity style={styles.retryActionBtn} onPress={() => loadRoutes(true)}>
+                  <Text style={styles.retryActionBtnText}>Retry</Text>
                 </TouchableOpacity>
               </View>
             )}
-            {!routeLoading && !routeError && routes.length === 0 && (
-              <Text style={styles.emptyText}>No active routes found. Please contact admin.</Text>
+
+            {!routeLoading && routes.length === 0 && !routeError && (
+              <Text style={styles.emptyNotice}>No active routes available. Contact campus admin.</Text>
             )}
-            {routes.map(r => (
-              <TouchableOpacity key={r.id} style={[styles.option, selectedRoute?.id === r.id && styles.optionSelected]}
-                onPress={() => handleSelectRoute(r)} activeOpacity={0.8}>
-                <Ionicons name="bus-outline" size={16} color={selectedRoute?.id === r.id ? colors.primary : colors.textSecondary} />
-                <Text style={[styles.optionText, selectedRoute?.id === r.id && styles.optionTextSelected]}>{r.name}</Text>
-                {selectedRoute?.id === r.id && <Ionicons name="checkmark-circle" size={16} color={colors.primary} />}
-              </TouchableOpacity>
-            ))}
+
+            <View style={styles.chipGrid}>
+              {routes.map(r => {
+                const isSelected = selectedRoute?.id === r.id;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[styles.chipItem, isSelected && styles.chipItemSelected]}
+                    onPress={() => handleSelectRoute(r)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="navigate" size={14} color={isSelected ? '#000000' : '#2563eb'} />
+                    <Text style={[styles.chipItemText, isSelected && styles.chipItemTextSelected]}>
+                      {r.name}
+                    </Text>
+                    {isSelected && <Ionicons name="checkmark-circle" size={14} color="#000000" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             {selectedRoute && (
               <>
-                <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Select Bus *</Text>
-                {busLoading
-                  ? <ActivityIndicator color={colors.primary} />
-                  : buses.map(b => (
-                    <TouchableOpacity key={b.id} style={[styles.option, selectedBus?.id === b.id && styles.optionSelected]}
-                      onPress={() => setSelectedBus(b)} activeOpacity={0.8}>
-                      <Ionicons name="bus" size={16} color={selectedBus?.id === b.id ? colors.primary : colors.textSecondary} />
-                      <Text style={[styles.optionText, selectedBus?.id === b.id && styles.optionTextSelected]}>
-                        Bus {b.busNumber} (Cap: {b.capacity})
-                      </Text>
-                      {selectedBus?.id === b.id && <Ionicons name="checkmark-circle" size={16} color={colors.primary} />}
-                    </TouchableOpacity>
-                  ))}
+                <Text style={[styles.stepFieldHeader, { marginTop: 10 }]}>2. Select Assigned Bus *</Text>
+                {busLoading ? (
+                  <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 6 }} />
+                ) : (
+                  <View style={styles.chipGrid}>
+                    {buses.map(b => {
+                      const isSelected = selectedBus?.id === b.id;
+                      return (
+                        <TouchableOpacity
+                          key={b.id}
+                          style={[styles.chipItem, isSelected && styles.chipItemSelected]}
+                          onPress={() => setSelectedBus(b)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="bus" size={14} color={isSelected ? '#000000' : '#2563eb'} />
+                          <Text style={[styles.chipItemText, isSelected && styles.chipItemTextSelected]}>
+                            Bus {b.busNumber}
+                          </Text>
+                          {isSelected && <Ionicons name="checkmark-circle" size={14} color="#000000" />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
 
-                <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Select Stop *</Text>
-                {stopLoading
-                  ? <ActivityIndicator color={colors.primary} />
-                  : stops.map(s => (
-                    <TouchableOpacity key={s.id} style={[styles.option, selectedStop?.id === s.id && styles.optionSelected]}
-                      onPress={() => setSelectedStop(s)} activeOpacity={0.8}>
-                      <Ionicons name="location-outline" size={16} color={selectedStop?.id === s.id ? colors.primary : colors.textSecondary} />
-                      <Text style={[styles.optionText, selectedStop?.id === s.id && styles.optionTextSelected]}>
-                        {s.sequence}. {s.name}{s.address ? ` — ${s.address}` : ''}
-                      </Text>
-                      {selectedStop?.id === s.id && <Ionicons name="checkmark-circle" size={16} color={colors.primary} />}
-                    </TouchableOpacity>
-                  ))}
+                <Text style={[styles.stepFieldHeader, { marginTop: 10 }]}>3. Select Boarding Stop *</Text>
+                {stopLoading ? (
+                  <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 6 }} />
+                ) : (
+                  <View style={styles.chipGrid}>
+                    {stops.map(s => {
+                      const isSelected = selectedStop?.id === s.id;
+                      return (
+                        <TouchableOpacity
+                          key={s.id}
+                          style={[styles.chipItem, isSelected && styles.chipItemSelected]}
+                          onPress={() => setSelectedStop(s)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="location" size={14} color={isSelected ? '#000000' : '#2563eb'} />
+                          <Text style={[styles.chipItemText, isSelected && styles.chipItemTextSelected]} numberOfLines={1}>
+                            {s.sequence}. {s.name}
+                          </Text>
+                          {isSelected && <Ionicons name="checkmark-circle" size={14} color="#000000" />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </>
             )}
           </View>
         )}
 
-        {/* Step 3: Documents */}
+        {/* ── STEP 3: Document Uploads ── */}
         {step === 3 && (
-          <View>
-            <Text style={styles.hint}>
-              📋 Please upload clear, readable copies. Accepted: JPEG, PNG, PDF (max 10 MB each).
-            </Text>
-            <DocUpload
-              label="College ID Card *"
+          <View style={styles.stepForm}>
+            <View style={styles.infoBadge}>
+              <Ionicons name="information-circle" size={15} color="#2563eb" />
+              <Text style={styles.infoBadgeText}>
+                Upload clear photos or PDFs (max 10MB each) for identity & fee verification.
+              </Text>
+            </View>
+
+            <DocCard
+              title="1. College ID Card *"
               file={collegeId}
-              onPickImage={() => pickImage(setCollegeId)}
+              onPickPhoto={() => pickImage(setCollegeId)}
               onPickDoc={() => pickDocument(setCollegeId)}
+              onRemove={() => setCollegeId(null)}
             />
-            <DocUpload
-              label="Bus Slip / Fee Receipt *"
+
+            <DocCard
+              title="2. Bus Fee Slip / Receipt *"
               file={busSlip}
-              onPickImage={() => pickImage(setBusSlip)}
+              onPickPhoto={() => pickImage(setBusSlip)}
               onPickDoc={() => pickDocument(setBusSlip)}
+              onRemove={() => setBusSlip(null)}
             />
           </View>
         )}
 
-        {/* Step 4: Review & Submit */}
+        {/* ── STEP 4: Summary & Review ── */}
         {step === 4 && (
-          <View>
-            <SummaryRow label="Full Name"      value={name} />
-            <SummaryRow label="Student ID"     value={studentCode} />
-            <SummaryRow label="Email Address"  value={email} />
-            {phone ? <SummaryRow label="Phone" value={phone} /> : null}
-            <SummaryRow label="Course Duration" value={`${courseStartYear} – ${courseEndYear}`} />
-            <SummaryRow label="Assigned Route" value={selectedRoute?.name || ''} />
-            <SummaryRow label="Assigned Bus"   value={`Bus ${selectedBus?.busNumber}`} />
-            <SummaryRow label="Assigned Stop"  value={selectedStop?.name || ''} />
-            <SummaryRow label="College ID Doc" value={collegeId?.name || ''} />
-            <SummaryRow label="Bus Slip Doc"   value={busSlip?.name || ''} />
+          <View style={styles.stepForm}>
+            <View style={styles.reviewCard}>
+              <Text style={styles.reviewCardHeader}>Applicant Summary</Text>
 
-            <View style={{ marginTop: 16, padding: 12, backgroundColor: '#f0fdf4', borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' }}>
-              <Text style={{ fontSize: 13, color: '#166534', lineHeight: 18 }}>
-                ✅ Once submitted, your registration request will be reviewed by college transport administration. After approval, you can log in directly using your email and chosen password.
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Full Name</Text>
+                <Text style={styles.reviewVal}>{name}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Student ID</Text>
+                <Text style={styles.reviewVal}>{studentCode}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Email</Text>
+                <Text style={styles.reviewVal} numberOfLines={1}>{email}</Text>
+              </View>
+              {phone ? (
+                <View style={styles.reviewRow}>
+                  <Text style={styles.reviewLabel}>Phone</Text>
+                  <Text style={styles.reviewVal}>{phone}</Text>
+                </View>
+              ) : null}
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Course Years</Text>
+                <Text style={styles.reviewVal}>{courseStartYear} – {courseEndYear}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Assigned Route</Text>
+                <Text style={styles.reviewVal}>{selectedRoute?.name}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Assigned Bus</Text>
+                <Text style={styles.reviewVal}>Bus {selectedBus?.busNumber}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Boarding Stop</Text>
+                <Text style={styles.reviewVal}>{selectedStop?.name}</Text>
+              </View>
+              <View style={styles.reviewRow}>
+                <Text style={styles.reviewLabel}>Documents</Text>
+                <Text style={styles.reviewVal}>ID Card & Fee Slip Attached</Text>
+              </View>
+            </View>
+
+            <View style={styles.approvalNote}>
+              <Ionicons name="checkmark-circle-outline" size={16} color="#2563eb" />
+              <Text style={styles.approvalNoteText}>
+                Your application will be verified by the college transport team.
               </Text>
             </View>
           </View>
         )}
       </ScrollView>
 
-      {/* Bottom action */}
-      <View style={styles.footer}>
-        {step < 4 ? (
-          <TouchableOpacity
-            style={[styles.nextBtn, !canProceed[step] && styles.nextBtnDisabled]}
-            onPress={goNext}
-            disabled={!canProceed[step]}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.nextBtnText}>Continue</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
-          </TouchableOpacity>
+      {/* ── Fixed Footer Action Bar (Guaranteed No Overlaps) ── */}
+      <View style={styles.footerBar}>
+        {step === 0 ? (
+          <View style={styles.footerCol}>
+            <TouchableOpacity
+              style={[styles.btnPrimaryFull, !canProceed[0] && styles.btnDisabled]}
+              onPress={goNext}
+              disabled={!canProceed[0]}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.btnPrimaryText}>Continue</Text>
+              <Ionicons name="arrow-forward" size={18} color="#000000" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.btnLink}
+              onPress={() => router.push('/(auth)/login')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.btnLinkText}>Already registered? <Text style={styles.btnLinkBold}>Sign In</Text></Text>
+            </TouchableOpacity>
+          </View>
         ) : (
-          <TouchableOpacity
-            style={[styles.nextBtn, submitting && styles.nextBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={submitting}
-            activeOpacity={0.85}
-          >
-            {submitting
-              ? <ActivityIndicator color="#fff" />
-              : <><Text style={styles.nextBtnText}>Submit Registration</Text>
-                  <Ionicons name="checkmark-done" size={18} color="#fff" /></>}
-          </TouchableOpacity>
+          <View style={styles.footerRow}>
+            {/* Step Back Button */}
+            <TouchableOpacity
+              style={styles.btnBack}
+              onPress={goBack}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="arrow-back" size={16} color="#000000" />
+              <Text style={styles.btnBackText}>Back</Text>
+            </TouchableOpacity>
+
+            {/* Next / Submit Button */}
+            {step < 4 ? (
+              <TouchableOpacity
+                style={[styles.btnNext, !canProceed[step] && styles.btnDisabled]}
+                onPress={goNext}
+                disabled={!canProceed[step]}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.btnPrimaryText}>Continue</Text>
+                <Ionicons name="arrow-forward" size={16} color="#000000" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.btnNext, submitting && styles.btnDisabled]}
+                onPress={handleSubmit}
+                disabled={submitting}
+                activeOpacity={0.85}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#000000" />
+                ) : (
+                  <>
+                    <Text style={styles.btnPrimaryText}>Submit</Text>
+                    <Ionicons name="checkmark-done" size={18} color="#000000" />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Reusable Components ──────────────────────────────────────────────────────
 
-function Field({ label, value, onChange, placeholder, keyboardType, autoCapitalize, maxLength, secureTextEntry, rightIcon }: any) {
+function CompactField({
+  label, value, onChange, placeholder, keyboardType, autoCapitalize, maxLength, secureTextEntry, rightIcon
+}: any) {
   return (
-    <View style={styles.fieldWrap}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.inputRow}>
+    <View style={styles.fieldBox}>
+      <Text style={styles.fieldTitle}>{label}</Text>
+      <View style={styles.fieldInputWrapper}>
         <TextInput
-          style={[styles.input, rightIcon && { paddingRight: 40 }]}
+          style={[styles.fieldInput, rightIcon ? { paddingRight: 36 } : null]}
           value={value}
           onChangeText={onChange}
           placeholder={placeholder}
-          placeholderTextColor={colors.textDim ?? '#94a3b8'}
+          placeholderTextColor="#94a3b8"
           keyboardType={keyboardType || 'default'}
-          autoCapitalize={autoCapitalize || 'words'}
+          autoCapitalize={autoCapitalize || 'none'}
           maxLength={maxLength}
           secureTextEntry={secureTextEntry}
         />
-        {rightIcon && <View style={styles.rightIconWrap}>{rightIcon}</View>}
+        {rightIcon && <View style={styles.fieldRightIcon}>{rightIcon}</View>}
       </View>
     </View>
   );
 }
 
-function DocUpload({ label, file, onPickImage, onPickDoc }: {
-  label: string; file: DocFile | null;
-  onPickImage: () => void; onPickDoc: () => void;
+function DocCard({
+  title, file, onPickPhoto, onPickDoc, onRemove
+}: {
+  title: string; file: DocFile | null;
+  onPickPhoto: () => void; onPickDoc: () => void; onRemove: () => void;
 }) {
   return (
-    <View style={styles.docBlock}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+    <View style={styles.docContainer}>
+      <Text style={styles.docHeading}>{title}</Text>
       {file ? (
-        <View style={styles.docPreview}>
-          <Ionicons name="document-attach" size={20} color={colors.primary} />
-          <Text style={styles.docName} numberOfLines={1}>{file.name}</Text>
-          <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
+        <View style={styles.docAttachedRow}>
+          <View style={styles.docAttachedInfo}>
+            <Ionicons name="document-text" size={18} color="#2563eb" />
+            <Text style={styles.docAttachedName} numberOfLines={1}>{file.name}</Text>
+          </View>
+          <TouchableOpacity style={styles.docRemoveBtn} onPress={onRemove} activeOpacity={0.8}>
+            <Ionicons name="close-circle" size={18} color="#000000" />
+          </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.docBtns}>
-          <TouchableOpacity style={styles.docBtn} onPress={onPickImage} activeOpacity={0.8}>
-            <Ionicons name="image-outline" size={16} color={colors.primary} />
-            <Text style={styles.docBtnText}>Photo</Text>
+        <View style={styles.docButtonRow}>
+          <TouchableOpacity style={styles.docActionButton} onPress={onPickPhoto} activeOpacity={0.8}>
+            <Ionicons name="camera" size={15} color="#000000" />
+            <Text style={styles.docActionButtonText}>Photo</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.docBtn} onPress={onPickDoc} activeOpacity={0.8}>
-            <Ionicons name="document-outline" size={16} color={colors.primary} />
-            <Text style={styles.docBtnText}>File / PDF</Text>
+          <TouchableOpacity style={styles.docActionButton} onPress={onPickDoc} activeOpacity={0.8}>
+            <Ionicons name="document-attach" size={15} color="#000000" />
+            <Text style={styles.docActionButtonText}>File / PDF</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -481,90 +699,462 @@ function DocUpload({ label, file, onPickImage, onPickDoc }: {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.summaryRow}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Stylesheet ───────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root:       { flex: 1, backgroundColor: colors.background ?? '#0f172a' },
-  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12 },
-  backBtn:    { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
-                backgroundColor: colors.surface ?? '#1e293b' },
-  headerTitle:{ fontSize: 17, fontWeight: '700', color: colors.textPrimary ?? '#f1f5f9' },
+  root: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
 
-  progressRow:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                paddingHorizontal: 24, marginTop: 16 },
-  stepWrapper:{ flexDirection: 'row', alignItems: 'center' },
-  stepDot:    { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.surface ?? '#1e293b',
-                borderWidth: 1.5, borderColor: colors.border ?? '#334155',
-                justifyContent: 'center', alignItems: 'center' },
-  stepDotActive: { backgroundColor: colors.primary ?? '#38bdf8', borderColor: colors.primary ?? '#38bdf8' },
-  stepDotDone:   { backgroundColor: '#22c55e', borderColor: '#22c55e' },
-  stepNum:    { fontSize: 10, color: colors.textSecondary ?? '#94a3b8', fontWeight: '700' },
-  stepLine:   { width: 24, height: 1.5, backgroundColor: colors.border ?? '#334155' },
-  stepLineDone: { backgroundColor: '#22c55e' },
-  stepLabel:  { textAlign: 'center', fontSize: 13, color: colors.textSecondary ?? '#94a3b8',
-                marginTop: 8, fontWeight: '600' },
+  // Top Bar
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+    paddingBottom: 10,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  backCircleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2563eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topBarTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#000000',
+    letterSpacing: -0.2,
+  },
 
-  body:       { padding: 20, paddingBottom: 40 },
+  // Stepper
+  stepperContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBubble: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepBubbleActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  stepBubbleDone: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  stepBubbleText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748b',
+  },
+  stepBubbleTextActive: {
+    color: '#000000',
+  },
+  stepConnector: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#e2e8f0',
+    marginHorizontal: 4,
+    maxWidth: 40,
+  },
+  stepConnectorDone: {
+    backgroundColor: '#2563eb',
+  },
+  stepCurrentTitle: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  stepCurrentName: {
+    fontWeight: '800',
+    color: '#000000',
+  },
 
-  fieldWrap:  { marginBottom: 16 },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textPrimary ?? '#f1f5f9', marginBottom: 6 },
-  inputRow:   { position: 'relative', justifyContent: 'center' },
-  rightIconWrap: { position: 'absolute', right: 12, top: 14 },
-  input:      { backgroundColor: colors.surface ?? '#1e293b', borderRadius: 12,
-                paddingHorizontal: 14, paddingVertical: 12, fontSize: 14,
-                color: colors.textPrimary ?? '#f1f5f9', borderWidth: 1,
-                borderColor: colors.border ?? '#334155' },
-  hint:       { fontSize: 12, color: colors.textSecondary ?? '#94a3b8', lineHeight: 18,
-                backgroundColor: colors.surface ?? '#1e293b', borderRadius: 10,
-                padding: 12, marginBottom: 16 },
-  errorText:  { fontSize: 12, color: '#ef4444', marginTop: -8, marginBottom: 8 },
+  // Scroll Body
+  scrollArea: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  stepForm: {
+    width: '100%',
+  },
 
-  option:     { flexDirection: 'row', alignItems: 'center', gap: 10,
-                backgroundColor: colors.surface ?? '#1e293b', borderRadius: 10,
-                padding: 12, marginBottom: 8, borderWidth: 1.5, borderColor: colors.border ?? '#334155' },
-  optionSelected: { borderColor: colors.primary ?? '#38bdf8', backgroundColor: colors.primaryGlow ?? '#082f49' },
-  optionText: { flex: 1, fontSize: 13, color: colors.textSecondary ?? '#94a3b8' },
-  optionTextSelected: { color: colors.primary ?? '#38bdf8', fontWeight: '600' },
+  // Compact Fields & Grids
+  rowTwo: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 0,
+  },
+  col: {
+    flex: 1,
+  },
+  fieldBox: {
+    marginBottom: 8,
+  },
+  fieldTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  fieldInputWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  fieldInput: {
+    height: 40,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#000000',
+    fontWeight: '600',
+  },
+  fieldRightIcon: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+  },
 
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
-  loadingText: { fontSize: 13, color: colors.textSecondary ?? '#94a3b8' },
-  emptyText:  { fontSize: 13, color: colors.textSecondary ?? '#94a3b8', textAlign: 'center',
-                paddingVertical: 16, fontStyle: 'italic' },
-  errorBox:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#3f0303',
-                borderRadius: 10, padding: 12, marginBottom: 8 },
-  errorBoxText: { flex: 1, fontSize: 12, color: '#fca5a5' },
-  retryBtn:   { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#ef4444', borderRadius: 6 },
-  retryBtnText: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  validationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  validationText: {
+    fontSize: 11,
+    color: '#dc2626',
+    fontWeight: '600',
+  },
 
-  docBlock:   { marginBottom: 20 },
-  docPreview: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12,
-                backgroundColor: '#064e3b', borderRadius: 10 },
-  docName:    { flex: 1, fontSize: 13, color: '#86efac' },
-  docBtns:    { flexDirection: 'row', gap: 10 },
-  docBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                gap: 6, padding: 12, backgroundColor: colors.surface ?? '#1e293b',
-                borderRadius: 10, borderWidth: 1.5, borderColor: colors.primary ?? '#38bdf8',
-                borderStyle: 'dashed' },
-  docBtnText: { fontSize: 13, color: colors.primary ?? '#38bdf8', fontWeight: '600' },
+  infoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  infoBadgeText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#1e3a8a',
+    lineHeight: 15,
+    fontWeight: '600',
+  },
 
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border ?? '#334155' },
-  summaryLabel: { fontSize: 13, color: colors.textSecondary ?? '#94a3b8', fontWeight: '600' },
-  summaryValue: { fontSize: 13, color: colors.textPrimary ?? '#f1f5f9', flex: 1, textAlign: 'right' },
+  sectionSubtitle: {
+    fontSize: 12.5,
+    color: '#334155',
+    marginBottom: 10,
+    fontWeight: '600',
+  },
 
-  footer:     { padding: 16, paddingBottom: Platform.OS === 'ios' ? 32 : 16 },
-  nextBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                gap: 8, backgroundColor: colors.primary ?? '#38bdf8', borderRadius: 14,
-                paddingVertical: 14 },
-  nextBtnDisabled: { opacity: 0.4 },
-  nextBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  // Route / Bus selection
+  stepFieldHeader: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#000000',
+    marginBottom: 6,
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
+  },
+  chipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+  },
+  chipItemSelected: {
+    backgroundColor: '#2563eb',
+    borderColor: '#1d4ed8',
+  },
+  chipItemText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  chipItemTextSelected: {
+    color: '#000000',
+  },
+
+  loaderInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  loaderInlineText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 11.5,
+    color: '#b91c1c',
+  },
+  retryActionBtn: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  retryActionBtnText: {
+    fontSize: 11,
+    color: '#000000',
+    fontWeight: '800',
+  },
+  emptyNotice: {
+    fontSize: 12,
+    color: '#64748b',
+    paddingVertical: 8,
+    fontStyle: 'italic',
+  },
+
+  // Documents
+  docContainer: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  docHeading: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  docButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  docActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+  },
+  docActionButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#000000',
+  },
+  docAttachedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  docAttachedInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  docAttachedName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#000000',
+    flex: 1,
+  },
+  docRemoveBtn: {
+    padding: 4,
+  },
+
+  // Review Card
+  reviewCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  reviewCardHeader: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#000000',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingBottom: 6,
+    marginBottom: 6,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+  },
+  reviewLabel: {
+    fontSize: 11.5,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  reviewVal: {
+    fontSize: 11.5,
+    color: '#000000',
+    fontWeight: '700',
+    maxWidth: '65%',
+    textAlign: 'right',
+  },
+  approvalNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    padding: 8,
+  },
+  approvalNoteText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#1e3a8a',
+    fontWeight: '600',
+  },
+
+  // Footer Buttons (Strict spacing & No Overlaps)
+  footerBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  footerCol: {
+    width: '100%',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+  },
+  btnPrimaryFull: {
+    height: 44,
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  btnBack: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  btnBackText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#000000',
+  },
+  btnNext: {
+    flex: 1.8,
+    height: 44,
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  btnPrimaryText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#000000',
+  },
+  btnDisabled: {
+    opacity: 0.4,
+  },
+  btnLink: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  btnLinkText: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  btnLinkBold: {
+    fontWeight: '800',
+    color: '#000000',
+    textDecorationLine: 'underline',
+  },
 });

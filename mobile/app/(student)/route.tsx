@@ -337,14 +337,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stepCircleAssigned: {
-    backgroundColor: colors.success,
-    borderColor: '#ffffff',
+    backgroundColor: colors.primary,
+    borderColor: '#1d4ed8',
   },
   stepCircleOrigin: {
     borderColor: colors.primary,
   },
   stepCircleTerminus: {
-    borderColor: colors.indigo,
+    borderColor: colors.primary,
   },
   stepNumber: {
     fontSize: 11,
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   stepNumberHighlight: {
-    color: '#ffffff',
+    color: '#000000',
   },
   verticalLine: {
     width: 2,

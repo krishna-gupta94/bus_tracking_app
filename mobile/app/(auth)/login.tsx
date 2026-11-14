@@ -154,11 +154,11 @@ export default function LoginScreen() {
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color="#ffffff" size="small" />
+              <ActivityIndicator color="#000000" size="small" />
             ) : (
               <View style={styles.btnContentRow}>
                 <Text style={styles.buttonText}>Sign In</Text>
-                <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+                <Ionicons name="arrow-forward" size={18} color="#000000" />
               </View>
             )}
           </TouchableOpacity>
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buttonText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   modalCloseText: {
-    color: '#ffffff',
+    color: '#000000',
     fontWeight: '700',
     fontSize: 14,
   },

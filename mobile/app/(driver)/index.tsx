@@ -89,11 +89,10 @@ export default function DriverHomeScreen() {
   }, []);
 
   const loadTripData = useCallback(async () => {
-    await refreshUserData();
     try {
-      const res = await mobileApi.get('/trips');
-      const trips = res.data.data;
-      const running = trips.find((t: any) => t.status === 'ACTIVE');
+      const res = await mobileApi.get('/trips?status=ACTIVE');
+      const trips = res.data.data || [];
+      const running = trips.find((t: any) => t.status === 'ACTIVE') || trips[0];
       if (running) {
         setActiveTrip(running);
         // Calculate elapsed seconds from trip start
@@ -477,7 +476,7 @@ export default function DriverHomeScreen() {
                 onPress={() => setShowSOSModal(true)}
                 activeOpacity={0.85}
               >
-                <Ionicons name="alert-circle" size={20} color="#ffffff" />
+                <Ionicons name="alert-circle" size={20} color="#000000" />
                 <Text style={styles.driverSOSText}>EMERGENCY SOS</Text>
               </TouchableOpacity>
 
@@ -488,10 +487,10 @@ export default function DriverHomeScreen() {
                 activeOpacity={0.85}
               >
                 {loading ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <ActivityIndicator color="#000000" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="stop-circle" size={20} color="#ffffff" />
+                    <Ionicons name="stop-circle" size={20} color="#000000" />
                     <Text style={styles.endTripText}>END TRIP</Text>
                   </>
                 )}
@@ -564,10 +563,10 @@ export default function DriverHomeScreen() {
               activeOpacity={0.85}
             >
               {loading ? (
-                <ActivityIndicator color="#ffffff" size="small" />
+                <ActivityIndicator color="#000000" size="small" />
               ) : (
                 <>
-                  <Ionicons name="play" size={22} color="#ffffff" />
+                  <Ionicons name="play" size={22} color="#000000" />
                   <Text style={styles.startBtnText}>START TRIP & BROADCAST GPS</Text>
                 </>
               )}
@@ -820,7 +819,7 @@ const styles = StyleSheet.create({
   timerValue: {
     fontSize: 36,
     fontWeight: '900',
-    color: '#ffffff',
+    color: '#000000',
     marginTop: 4,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
@@ -892,12 +891,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.danger,
+    backgroundColor: colors.primary,
     borderRadius: 16,
     paddingVertical: 16,
   },
   driverSOSText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -908,12 +907,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#dc2626',
+    backgroundColor: colors.primary,
     borderRadius: 16,
     paddingVertical: 16,
   },
   endTripText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -928,7 +927,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   startBtnText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.8,

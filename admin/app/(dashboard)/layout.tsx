@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,6 +9,8 @@ import {
   Navigation, History, Bell, Settings, LogOut, Bus, AlertTriangle, Activity, ClipboardList
 } from 'lucide-react';
 import api from '@/lib/api';
+import { io, Socket } from 'socket.io-client';
+import toast from 'react-hot-toast';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', section: 'OVERVIEW' },
@@ -30,13 +32,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [activeSOSCount, setActiveSOSCount] = useState(0);
+  const [liveEmergency, setLiveEmergency] = useState<any>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
   }, [user, isLoading, router]);
 
+  // Initial load of SOS notifications
   useEffect(() => {
-    // Check notifications for any recent emergency alerts
     if (user) {
       api.get('/notifications').then(res => {
         const emergencies = res.data.data?.filter((n: any) => 
@@ -46,6 +50,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }).catch(() => {});
     }
   }, [user, pathname]);
+
+  // Real-time Global Socket.IO Listener for instant SOS alerts across the entire Admin Panel
+  useEffect(() => {
+    if (!user) return;
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      auth: { token: token || '' },
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('join:admin', { token });
+    });
+
+    socket.on('sos:trigger', (sosData: any) => {
+      console.log('🚨 [Global Admin Socket] Real-time SOS Received:', sosData);
+      
+      // Play emergency alert sound using Web Audio API
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime + 0.15);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      } catch (_) {}
+
+      // Increment badge
+      setActiveSOSCount(c => c + 1);
+      setLiveEmergency(sosData);
+
+      toast.error(`🚨 EMERGENCY SOS: ${sosData.userRole || 'STUDENT'} ${sosData.userName || ''} triggered an emergency alert!`, {
+        duration: 10000,
+        position: 'top-center',
+      });
+    });
+
+    socket.on('sos:status_update', ({ status }: { status: string }) => {
+      if (status === 'RESOLVED') {
+        setActiveSOSCount(c => Math.max(0, c - 1));
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
 
   if (isLoading) {
     return (
@@ -117,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="topbar-actions">
             <Link href="/sos-alerts" className="badge badge-red" style={{ gap: 6, cursor: 'pointer', padding: '6px 12px' }}>
               <AlertTriangle size={13} />
-              <span>SOS Monitor</span>
+              <span>SOS Monitor ({activeSOSCount})</span>
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
               <div className="status-dot green pulse-indicator" />
@@ -125,6 +187,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
+
+        {/* Global Live Emergency Banner */}
+        {liveEmergency && (
+          <div style={{
+            background: '#eff6ff',
+            color: '#000000',
+            border: '1.5px solid #2563eb',
+            padding: '12px 20px',
+            margin: '16px 24px 0 24px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.2)',
+            position: 'relative',
+            zIndex: 10
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <AlertTriangle size={24} style={{ color: '#2563eb' }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 14, color: '#000000' }}>
+                  🚨 CRITICAL EMERGENCY SOS: {liveEmergency.userName} ({liveEmergency.userRole})
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.85, color: '#1e293b' }}>
+                  Bus: {liveEmergency.busNumber || 'N/A'} • Route: {liveEmergency.routeName || 'N/A'} • Stop: {liveEmergency.stopName || 'N/A'} • {new Date(liveEmergency.timestamp || Date.now()).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Link href="/sos-alerts" className="btn btn-sm" style={{ background: '#2563eb', color: '#000000', fontWeight: 700 }}>
+                View Incident Dispatch
+              </Link>
+              <button onClick={() => setLiveEmergency(null)} style={{ background: 'transparent', border: 'none', color: '#000000', cursor: 'pointer', padding: '4px 8px', fontSize: 16 }}>
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {children}
       </main>
     </div>
