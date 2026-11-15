@@ -102,4 +102,19 @@ router.post(
   }
 );
 
+/**
+ * GET /api/upload/file/*
+ * Serve local files stored when Supabase storage is not configured.
+ */
+router.get('/file/*', (req: Request, res: Response) => {
+  const relPath = (req.params as any)[0];
+  const fullPath = require('path').join(process.cwd(), 'uploads', relPath);
+  const fs = require('fs');
+  if (fs.existsSync(fullPath)) {
+    res.sendFile(fullPath);
+  } else {
+    res.status(404).json({ success: false, message: 'File not found' });
+  }
+});
+
 export default router;

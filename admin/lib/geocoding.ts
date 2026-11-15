@@ -2,7 +2,7 @@
 // Designed for high-accuracy village, town, landmark, street, and address search
 
 export const MAPTILER_API_KEY =
-  process.env.NEXT_PUBLIC_MAPTILER_API_KEY || 'bpSZcLTiwDllGaecH4T9';
+  process.env.NEXT_PUBLIC_MAPTILER_API_KEY || 'byPFwd13qoCinkfR0OfW';
 
 export interface GeocodeResult {
   id: string;

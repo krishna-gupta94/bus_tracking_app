@@ -20,6 +20,13 @@ const tripDetailInclude = {
   locations: { orderBy: { timestamp: 'desc' as const }, take: 1 },
 };
 
+// Used by startTrip & endTrip responses
+const tripInclude = {
+  bus: { select: { id: true, busNumber: true, registrationNumber: true } },
+  driver: { include: { user: { select: { name: true, email: true } } } },
+  route: { select: { id: true, name: true } },
+};
+
 export const getTrips = async (req: AuthRequest, res: Response): Promise<void> => {
   const { status, page = '1', limit = '20' } = req.query as Record<string, string>;
   const parsedLimit = Math.min(parseInt(limit) || 20, 100);

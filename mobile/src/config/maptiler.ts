@@ -1,4 +1,4 @@
-export const MAPTILER_API_KEY = 'bpSZcLTiwDllGaecH4T9';
+export const MAPTILER_API_KEY = 'byPFwd13qoCinkfR0OfW';
 
 export const MAPTILER_TILES = {
   streets: `https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`,

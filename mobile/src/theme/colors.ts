@@ -1,14 +1,15 @@
 export const colors = {
-  // Pure White Theme Backgrounds
-  background: '#ffffff',
-  backgroundSecondary: '#f8fafc',
-  surface: '#ffffff',
-  surfaceElevated: '#f1f5f9',
-  surfaceHighlight: '#e2e8f0',
+  // Neumorphic Soft Surface Palette (#e6ecf5 base)
+  background: '#e6ecf5',
+  backgroundSecondary: '#dde4ef',
+  surface: '#e6ecf5',
+  surfaceElevated: '#e6ecf5',
+  surfaceHighlight: '#d5dde8',
+  surfaceInset: '#dde4ee',
 
-  // Borders
-  border: '#e2e8f0',
-  borderLight: '#cbd5e1',
+  // Borders & Dividers
+  border: '#d5dde8',
+  borderLight: '#ccd5e2',
   borderFocus: '#2563eb',
 
   // Accents & Brand: Blue
@@ -20,70 +21,84 @@ export const colors = {
   indigo: '#2563eb',
   indigoGlow: 'rgba(37, 99, 235, 0.18)',
 
-  // Statuses (Clean Blue / Black / White palette)
-  success: '#2563eb',
-  successGlow: 'rgba(37, 99, 235, 0.15)',
-  successDark: '#1d4ed8',
+  // Statuses
+  success: '#16a34a',
+  successGlow: 'rgba(22, 163, 74, 0.15)',
+  successDark: '#15803d',
 
-  warning: '#2563eb',
-  warningGlow: 'rgba(37, 99, 235, 0.15)',
+  warning: '#d97706',
+  warningGlow: 'rgba(217, 119, 6, 0.15)',
 
-  danger: '#2563eb',
-  dangerGlow: 'rgba(37, 99, 235, 0.18)',
-  dangerDark: '#1d4ed8',
+  danger: '#ef4444',
+  dangerGlow: 'rgba(239, 68, 68, 0.18)',
+  dangerDark: '#dc2626',
 
   info: '#2563eb',
 
-  // Button tokens
-  buttonBackground: '#2563eb', // Blue button background
-  buttonText: '#000000',       // Black button text
+  // Button tokens (Blue background with Black text)
+  buttonBackground: '#2563eb',
+  buttonText: '#000000',
 
-  // Typography (Dark / Black on White)
-  textPrimary: '#000000',      // Pure black text
-  textSecondary: '#1e293b',
+  // Typography (Unslopped Slate Hierarchy)
+  textPrimary: '#0f172a',
+  textSecondary: '#334155',
   textMuted: '#64748b',
   textDim: '#94a3b8',
 
   // Overlays & Glass
-  glassBackground: 'rgba(255, 255, 255, 0.95)',
+  glassBackground: 'rgba(230, 236, 245, 0.95)',
   glassBorder: 'rgba(37, 99, 235, 0.25)',
-  overlay: 'rgba(0, 0, 0, 0.4)',
+  overlay: 'rgba(15, 23, 42, 0.45)',
 };
 
 export const shadows = {
   sm: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowColor: '#a3b1c6',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
     elevation: 2,
   },
   md: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
+    shadowColor: '#a3b1c6',
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
     elevation: 4,
   },
   lg: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowColor: '#9ba9bf',
+    shadowOffset: { width: 8, height: 8 },
+    shadowOpacity: 0.75,
+    shadowRadius: 16,
     elevation: 6,
   },
+  neuCard: {
+    shadowColor: '#a3b1c6',
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 0.65,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  neuBtn: {
+    shadowColor: '#9ba9bf',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.7,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   emergencyGlow: {
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
     elevation: 4,
   },
   primaryGlow: {
     shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 3,
   },
 };

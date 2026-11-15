@@ -106,7 +106,7 @@ export default function RouteMonitoringPage() {
       setShowExportModal(false);
     } catch (err: any) {
       if (err.response && err.response.data instanceof Blob) {
-         err.response.data.text().then(text => {
+         err.response.data.text().then((text: string) => {
            try {
              const data = JSON.parse(text);
              toast.error(data.message || 'Export failed');

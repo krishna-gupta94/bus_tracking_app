@@ -149,7 +149,7 @@ export default function RegisterScreen() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permission needed', 'Please allow photo library access.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]) {
@@ -797,7 +797,7 @@ const styles = StyleSheet.create({
   // Scroll Body
   scrollArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
   fieldTitle: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#000000',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   fieldInputWrapper: {
@@ -831,14 +831,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fieldInput: {
-    height: 40,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
+    height: 42,
+    backgroundColor: colors.surfaceInset,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     paddingHorizontal: 12,
     fontSize: 13,
-    color: '#000000',
+    color: colors.textPrimary,
     fontWeight: '600',
   },
   fieldRightIcon: {

@@ -13,17 +13,17 @@ import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
 
 const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', section: 'OVERVIEW' },
+  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', section: 'Overview' },
   { href: '/live-tracking', icon: Navigation, label: 'Live Tracking', section: null },
   { href: '/route-monitoring', icon: Activity, label: 'Route Monitoring', section: null },
-  { href: '/sos-alerts', icon: AlertTriangle, label: 'SOS Alerts', section: 'SAFETY & EMERGENCY', alertBadge: true },
-  { href: '/trips', icon: History, label: 'Trips', section: 'TRANSIT FLEET' },
+  { href: '/sos-alerts', icon: AlertTriangle, label: 'SOS Alerts', section: 'Safety & Emergency', alertBadge: true },
+  { href: '/trips', icon: History, label: 'Trips', section: 'Transit Fleet' },
   { href: '/buses', icon: Bus, label: 'Buses', section: null },
   { href: '/routes', icon: Route, label: 'Routes', section: null },
-  { href: '/students', icon: Users, label: 'Students', section: 'USER ACCOUNTS' },
+  { href: '/students', icon: Users, label: 'Students', section: 'User Accounts' },
   { href: '/registration-requests', icon: ClipboardList, label: 'Registrations', section: null },
   { href: '/drivers', icon: Truck, label: 'Drivers', section: null },
-  { href: '/notifications', icon: Bell, label: 'Notifications', section: 'SYSTEM' },
+  { href: '/notifications', icon: Bell, label: 'Notifications', section: 'System' },
   { href: '/settings', icon: Settings, label: 'Settings', section: null },
 ];
 
@@ -188,38 +188,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        {/* Global Live Emergency Banner */}
+        {/* Global Live Emergency Banner — sticky below topbar, full-width in flow, z-index below sidebar/topbar */}
         {liveEmergency && (
           <div style={{
-            background: '#eff6ff',
-            color: '#000000',
-            border: '1.5px solid #2563eb',
-            padding: '12px 20px',
+            background: 'var(--bg-primary)',
+            color: 'var(--text-primary)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            padding: '14px 22px',
             margin: '16px 24px 0 24px',
-            borderRadius: '8px',
+            borderRadius: '16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.2)',
+            boxShadow: 'var(--neu-surface)',
             position: 'relative',
-            zIndex: 10
+            zIndex: 1,          /* below topbar(50) & sidebar(200) so it scrolls under them */
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <AlertTriangle size={24} style={{ color: '#2563eb' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: 'var(--bg-primary)',
+                boxShadow: 'var(--neu-inset)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--danger)'
+              }}>
+                <AlertTriangle size={20} />
+              </div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 14, color: '#000000' }}>
-                  🚨 CRITICAL EMERGENCY SOS: {liveEmergency.userName} ({liveEmergency.userRole})
+                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)' }}>
+                  Emergency Beacon: {liveEmergency.userName} ({liveEmergency.userRole})
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.85, color: '#1e293b' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                   Bus: {liveEmergency.busNumber || 'N/A'} • Route: {liveEmergency.routeName || 'N/A'} • Stop: {liveEmergency.stopName || 'N/A'} • {new Date(liveEmergency.timestamp || Date.now()).toLocaleTimeString()}
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Link href="/sos-alerts" className="btn btn-sm" style={{ background: '#2563eb', color: '#000000', fontWeight: 700 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <Link href="/sos-alerts" className="btn btn-sm btn-danger">
                 View Incident Dispatch
               </Link>
-              <button onClick={() => setLiveEmergency(null)} style={{ background: 'transparent', border: 'none', color: '#000000', cursor: 'pointer', padding: '4px 8px', fontSize: 16 }}>
+              <button
+                onClick={() => setLiveEmergency(null)}
+                className="btn btn-sm btn-ghost btn-icon"
+                title="Dismiss"
+              >
                 ✕
               </button>
             </div>

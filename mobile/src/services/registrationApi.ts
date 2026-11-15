@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // ─── API client ──────────────────────────────────────────────────────────────
 // Uses same base URL pattern as AuthContext.
@@ -84,7 +84,7 @@ export async function uploadRegistrationDoc(
     fileUri,
     {
       httpMethod: 'POST',
-      uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? 0,
+      uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? 1,
       fieldName: 'file',
       mimeType,
       parameters: {
@@ -117,7 +117,7 @@ export async function uploadDoc(
 
   const result = await FileSystem.uploadAsync(uploadUrl, fileUri, {
     httpMethod: 'POST',
-    uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? 0,
+    uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? 1,
     fieldName: 'file',
     mimeType,
     parameters: { requestId, docType },

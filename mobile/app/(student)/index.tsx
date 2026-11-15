@@ -237,9 +237,9 @@ export default function StudentHomeScreen() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning 👋';
-    if (hour < 17) return 'Good Afternoon 👋';
-    return 'Good Evening 🌙';
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
   };
 
   const handleBoardingResponse = async (response: 'YES' | 'NO') => {
@@ -808,8 +808,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
     marginBottom: 14,
+    ...shadows.neuCard,
   },
   routeHeaderRow: {
     flexDirection: 'row',
@@ -820,7 +821,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: colors.primaryGlow,
+    backgroundColor: colors.surfaceInset,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -951,10 +954,11 @@ const styles = StyleSheet.create({
   },
   busCard: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    ...shadows.neuCard,
   },
   busCardTop: {
     flexDirection: 'row',
@@ -963,10 +967,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   busNumberPill: {
-    backgroundColor: colors.backgroundSecondary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceInset,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   busNumberPillText: {
     fontSize: 13,
@@ -974,24 +980,26 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   earliestBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    backgroundColor: 'rgba(22, 163, 74, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   earliestText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
-    color: '#10b981',
+    color: '#16a34a',
   },
   etaDisplayBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.primaryGlow,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    backgroundColor: colors.surfaceInset,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   etaDisplayText: {
     fontSize: 13,
@@ -1001,9 +1009,11 @@ const styles = StyleSheet.create({
   busCardDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: colors.backgroundSecondary,
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: colors.surfaceInset,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 12,
+    padding: 12,
   },
   busDetailItem: {
     flex: 1,
@@ -1016,10 +1026,12 @@ const styles = StyleSheet.create({
   busDetailLabel: {
     fontSize: 10,
     color: colors.textMuted,
+    textTransform: 'uppercase',
+    fontWeight: '700',
   },
   busDetailVal: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 12.5,
+    fontWeight: '800',
     color: colors.textPrimary,
     marginTop: 2,
   },
@@ -1038,6 +1050,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 20,
     gap: 8,
+    ...shadows.neuBtn,
   },
   trackBtnText: {
     fontSize: 14,

@@ -126,7 +126,7 @@ export default function LiveMap() {
   const [liveLocations, setLiveLocations] = useState<Map<string, BusLocation>>(new Map());
   const [liveEtas, setLiveEtas] = useState<Map<string, any>>(new Map());
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
-  const [selectedProviderKey, setSelectedProviderKey] = useState<string>('carto_voyager');
+  const [selectedProviderKey, setSelectedProviderKey] = useState<string>('maptiler_streets');
   const [targetFly, setTargetFly] = useState<[number, number] | null>(null);
   const [connected, setConnected] = useState(false);
   const [search, setSearch] = useState('');
@@ -372,32 +372,33 @@ export default function LiveMap() {
                   {/* Real-time ETA Telemetry Box */}
                   <div
                     style={{
-                      background: 'rgba(15,23,42,0.6)',
-                      borderRadius: 6,
-                      padding: '6px 8px',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      marginBottom: 6,
+                      background: '#ffffff',
+                      borderRadius: 8,
+                      padding: '8px 10px',
+                      border: '1px solid #cbd5e1',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                      marginBottom: 8,
                       fontSize: 11,
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 3,
+                      gap: 4,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Next Stop:</span>
-                      <strong style={{ color: 'var(--text-primary)' }}>{eta?.nextStopName || 'In Transit'}</strong>
+                      <span style={{ color: '#000000', fontWeight: 600 }}>Next Stop:</span>
+                      <strong style={{ color: '#000000', fontWeight: 800 }}>{eta?.nextStopName || 'In Transit'}</strong>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>ETA Arrival:</span>
-                      <strong style={{ color: '#38bdf8', fontWeight: 800 }}>
+                      <span style={{ color: '#000000', fontWeight: 600 }}>ETA Arrival:</span>
+                      <strong style={{ color: '#000000', fontWeight: 800 }}>
                         {eta ? `${eta.etaFormatted} (${eta.distanceFormatted})` : 'Calculating...'}
                       </strong>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Speed / Conf:</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>
+                      <span style={{ color: '#000000', fontWeight: 600 }}>Speed / Conf:</span>
+                      <span style={{ color: '#000000', fontWeight: 700 }}>
                         {eta?.currentSpeedKmh !== undefined ? `${eta.currentSpeedKmh} km/h` : '--'} ·{' '}
                         {eta?.confidence ? `${Math.round(eta.confidence * 100)}%` : 'AI Est'}
                       </span>

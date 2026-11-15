@@ -1,5 +1,3 @@
-// This is your Prisma schema file
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,154 +7,133 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  phone        String?
-  passwordHash String
-  role         String   @default("STUDENT")
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  student       Student?
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  phone         String?
+  passwordHash  String
+  role          String         @default("STUDENT")
+  status        String         @default("ACTIVE")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   driver        Driver?
   notifications Notification[]
   sosAlerts     SOSAlert[]
+  student       Student?
 
   @@map("users")
 }
 
 model Student {
-  id          String @id @default(cuid())
-  userId      String @unique
-  studentCode String @unique
-
+  id                    String               @id @default(cuid())
+  userId                String               @unique
+  studentCode           String               @unique
   courseStartYear       Int?
   courseEndYear         Int?
   accountExpirationDate DateTime?
-  accountStatus         String    @default("ACTIVE")
-
-  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedRoute   Route? @relation("StudentRoute", fields: [assignedRouteId], references: [id])
-  assignedRouteId String?
-  assignedStop    Stop?  @relation("StudentStop", fields: [assignedStopId], references: [id])
-  assignedStopId  String?
-  assignedBus     Bus?   @relation("StudentBus", fields: [assignedBusId], references: [id])
-  assignedBusId   String?
-
-  boardingEvents      BoardingEvent[]
-  registrationRequest RegistrationRequest?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  accountStatus         String               @default("ACTIVE")
+  assignedRouteId       String?
+  assignedStopId        String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  assignedBusId         String?
+  boardingEvents        BoardingEvent[]
+  registrationRequest   RegistrationRequest?
+  assignedBus           Bus?                 @relation("StudentBus", fields: [assignedBusId], references: [id])
+  assignedRoute         Route?               @relation("StudentRoute", fields: [assignedRouteId], references: [id])
+  assignedStop          Stop?                @relation("StudentStop", fields: [assignedStopId], references: [id])
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("students")
 }
 
 model Driver {
-  id         String @id @default(cuid())
-  userId     String @unique
-  driverCode String @unique
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bus   Bus?
-  trips Trip[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  driverCode String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  bus        Bus?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trips      Trip[]
 
   @@map("drivers")
 }
 
 model Bus {
-  id                 String  @id @default(cuid())
-  busNumber          String  @unique
-  registrationNumber String  @unique
-  capacity           Int
-  status             String  @default("AVAILABLE")
-
-  driver   Driver? @relation(fields: [driverId], references: [id])
-  driverId String? @unique
-
-  route   Route?  @relation(fields: [routeId], references: [id])
-  routeId String?
-
-  trips                Trip[]
-  locations            BusLocation[]
+  id                   String                @id @default(cuid())
+  busNumber            String                @unique
+  registrationNumber   String                @unique
+  capacity             Int
+  status               String                @default("AVAILABLE")
+  driverId             String?               @unique
+  routeId              String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   boardingEvents       BoardingEvent[]
-  students             Student[]              @relation("StudentBus")
+  locations            BusLocation[]
+  driver               Driver?               @relation(fields: [driverId], references: [id])
+  route                Route?                @relation(fields: [routeId], references: [id])
   registrationRequests RegistrationRequest[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  students             Student[]             @relation("StudentBus")
+  trips                Trip[]
 
   @@map("buses")
 }
 
 model Route {
-  id          String  @id @default(cuid())
-  name        String
-  description String?
-  status      String  @default("ACTIVE")
-
-  stops                Stop[]
-  buses                Bus[]
-  trips                Trip[]
-  students             Student[]                 @relation("StudentRoute")
-  historicalMetrics    HistoricalSegmentMetric[]
+  id                   String                    @id @default(cuid())
+  name                 String
+  description          String?
+  status               String                    @default("ACTIVE")
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
   boardingEvents       BoardingEvent[]
+  buses                Bus[]
+  historicalMetrics    HistoricalSegmentMetric[]
   registrationRequests RegistrationRequest[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  stops                Stop[]
+  students             Student[]                 @relation("StudentRoute")
+  trips                Trip[]
 
   @@map("routes")
 }
 
 model Stop {
-  id        String  @id @default(cuid())
-  name      String
-  stopCode  String?
-  address   String?
-  latitude  Float
-  longitude Float
-  sequence  Int
-  eta       String?
-  status    String  @default("ACTIVE")
-
-  route   Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  routeId String
-
-  students             Student[]            @relation("StudentStop")
+  id                   String                @id @default(cuid())
+  name                 String
+  stopCode             String?
+  address              String?
+  latitude             Float
+  longitude            Float
+  sequence             Int
+  eta                  String?
+  status               String                @default("ACTIVE")
+  routeId              String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   registrationRequests RegistrationRequest[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  route                Route                 @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  students             Student[]             @relation("StudentStop")
 
   @@map("stops")
 }
 
 model Trip {
-  id        String    @id @default(cuid())
-  status    String    @default("ACTIVE")
-  startTime DateTime  @default(now())
-  endTime   DateTime?
-
-  bus      Bus    @relation(fields: [busId], references: [id])
-  busId    String
-
-  driver   Driver @relation(fields: [driverId], references: [id])
-  driverId String
-
-  route   Route  @relation(fields: [routeId], references: [id])
-  routeId String
-
-  locations      BusLocation[]
+  id             String          @id @default(cuid())
+  status         String          @default("ACTIVE")
+  startTime      DateTime        @default(now())
+  endTime        DateTime?
+  busId          String
+  driverId       String
+  routeId        String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   boardingEvents BoardingEvent[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  locations      BusLocation[]
+  bus            Bus             @relation(fields: [busId], references: [id])
+  driver         Driver          @relation(fields: [driverId], references: [id])
+  route          Route           @relation(fields: [routeId], references: [id])
 
   @@map("trips")
 }
@@ -165,16 +142,14 @@ model BusLocation {
   id        String   @id @default(cuid())
   latitude  Float
   longitude Float
-  speed     Float?   // Speed in km/h
-  heading   Float?   // Bearing in degrees
-  accuracy  Float?   // Accuracy in meters
+  speed     Float?
+  heading   Float?
+  accuracy  Float?
   timestamp DateTime @default(now())
-
-  trip   Trip   @relation(fields: [tripId], references: [id])
-  tripId String
-
-  bus   Bus    @relation(fields: [busId], references: [id])
-  busId String
+  tripId    String
+  busId     String
+  bus       Bus      @relation(fields: [busId], references: [id])
+  trip      Trip     @relation(fields: [tripId], references: [id])
 
   @@index([busId, timestamp])
   @@map("bus_locations")
@@ -185,15 +160,14 @@ model HistoricalSegmentMetric {
   routeId           String
   fromStopId        String?
   toStopId          String
-  dayOfWeek         Int      // 0 = Sunday, 1 = Monday, ... 6 = Saturday
-  hourOfDay         Int      // 0 - 23
+  dayOfWeek         Int
+  hourOfDay         Int
   distanceMeters    Float
-  travelTimeSeconds Float    // Moving average of segment transit duration
+  travelTimeSeconds Float
   averageSpeedKmh   Float
   sampleCount       Int      @default(1)
   updatedAt         DateTime @updatedAt
-
-  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  route             Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
 
   @@unique([routeId, toStopId, dayOfWeek, hourOfDay])
   @@index([routeId, toStopId])
@@ -206,68 +180,41 @@ model Notification {
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }
 
 model BoardingEvent {
-  id                 String    @id @default(cuid())
-  studentId          String
-  busId              String?
-  tripId             String?
-  routeId            String
-  stopId             String?
-
-  // === Core Detection Fields (preserved) ===
-  status             String    @default("UNKNOWN")
-  // Valid: PENDING_CONFIRMATION | STUDENT_CONFIRMED | STUDENT_DECLINED
-  //        | GPS_LIKELY_BOARDED | CONFLICT
-  //        | BOARDED_CONFIRMED | NOT_BOARDED_CONFIRMED
-  //        | NO_RESPONSE | VERIFICATION_INCOMPLETE | UNKNOWN
-  //        | BOARDED_ASSIGNED_ROUTE_BUS | BOARDED_OTHER_ROUTE_BUS  (legacy)
-  //        | LIKELY_BOARDED | NOT_BOARDED  (legacy)
-  confidence         Int       @default(0)         // 0 - 100
-  detectedBusNumber  String?
-  notes              String?
-  verifiedAt         DateTime?
-
-  // === Student Response Tracking ===
-  studentResponse    String?   // 'YES' | 'NO' | null (no response)
-  respondedAt        DateTime? // When student tapped YES/NO
-
-  // === GPS Inference (separate from student response) ===
-  gpsInference       String?   // 'LIKELY_BOARDED' | 'NOT_BOARDED' | 'INSUFFICIENT_DATA'
-  gpsConfidence      Int       @default(0) // 0-100, GPS-only confidence score
-  gpsEvidenceSummary String?   // Human-readable: "Moved 2.1km with bus over 180s, heading ±12°"
-
-  // === Confirmation Source ===
-  confirmationSource String?   // 'STUDENT_YES' | 'STUDENT_NO_GPS_AGREE' | 'ADMIN_REVIEW'
-                               // | 'GPS_AUTO' | 'NO_RESPONSE_GPS' | 'STUDENT_NO_GPS_INCONCLUSIVE'
-                               // | 'VERIFICATION_INCOMPLETE'
-
-  // === Admin Resolution ===
-  resolvedBy         String?   // Admin user.id who resolved a CONFLICT
-  resolvedAt         DateTime? // When admin resolved
-  previousStatus     String?   // Status before admin override (audit trail)
-
-  // === Verification Window ===
-  verificationExpiresAt DateTime? // When post-decline GPS monitoring ends
-
-  // === Dedup Key (strict: requires tripId + busId + stopId all non-null) ===
-  eventKey           String?   @unique
-  // Format: "s:{studentId}:t:{tripId}:b:{busId}:st:{stopId}"
-  // Set on create only, never mutated.
-
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  bus     Bus?    @relation(fields: [busId], references: [id], onDelete: SetNull)
-  trip    Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
-  route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(cuid())
+  studentId             String
+  busId                 String?
+  tripId                String?
+  routeId               String
+  stopId                String?
+  status                String    @default("UNKNOWN")
+  confidence            Int       @default(0)
+  detectedBusNumber     String?
+  notes                 String?
+  verifiedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  confirmationSource    String?
+  eventKey              String?   @unique
+  gpsConfidence         Int       @default(0)
+  gpsEvidenceSummary    String?
+  gpsInference          String?
+  previousStatus        String?
+  resolvedAt            DateTime?
+  resolvedBy            String?
+  respondedAt           DateTime?
+  studentResponse       String?
+  verificationExpiresAt DateTime?
+  bus                   Bus?      @relation(fields: [busId], references: [id])
+  route                 Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  student               Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  trip                  Trip?     @relation(fields: [tripId], references: [id])
 
   @@index([studentId, createdAt])
   @@index([routeId, createdAt])
@@ -280,7 +227,7 @@ model SOSAlert {
   id              String    @id @default(cuid())
   userId          String
   userName        String
-  userRole        String    // STUDENT | DRIVER
+  userRole        String
   studentCode     String?
   driverCode      String?
   busNumber       String?
@@ -289,14 +236,13 @@ model SOSAlert {
   latitude        Float?
   longitude       Float?
   locationAddress String?
-  status          String    @default("NEW") // NEW | ACKNOWLEDGED | RESOLVED
-  severity        String    @default("CRITICAL") // CRITICAL | HIGH | WARNING
+  status          String    @default("NEW")
+  severity        String    @default("CRITICAL")
   note            String?
   resolvedAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -304,57 +250,50 @@ model SOSAlert {
 }
 
 model RegistrationRequest {
-  id              String @id @default(cuid())
-
-  // Student info & password hash
-  name            String
-  studentCode     String
-  email           String
-  phone           String?
-  passwordHash    String  @default("")
-  courseStartYear Int
-  courseEndYear   Int
-
-  // Validated selection IDs
-  routeId String
-  busId   String
-  stopId  String
-
-  // Document storage paths & metadata in Supabase Storage (student-documents bucket, private)
+  id                  String    @id @default(cuid())
+  name                String
+  studentCode         String
+  email               String
+  phone               String?
+  courseStartYear     Int
+  courseEndYear       Int
+  routeId             String
+  busId               String
+  stopId              String
   collegeIdPath       String?
-  collegeIdName       String?
-  collegeIdType       String?
-  collegeIdSize       Int?
-  collegeIdUploadedAt DateTime?
-
   busSlipPath         String?
+  status              String    @default("PENDING")
+  reviewedById        String?
+  reviewedAt          DateTime?
+  rejectionReason     String?
+  approvedStudentId   String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   busSlipName         String?
-  busSlipType         String?
   busSlipSize         Int?
+  busSlipType         String?
   busSlipUploadedAt   DateTime?
-
-  // Registration lifecycle status: PENDING | APPROVED | REJECTED
-  status String @default("PENDING")
-
-  // Admin review
-  reviewedById    String?
-  reviewedAt      DateTime?
-  rejectionReason String?
-
-  // Linked student (set when Admin approves request)
-  approvedStudentId String? @unique
-
-  // Relations
-  route           Route    @relation(fields: [routeId], references: [id])
-  bus             Bus      @relation(fields: [busId], references: [id])
-  stop            Stop     @relation(fields: [stopId], references: [id])
-  approvedStudent Student? @relation(fields: [approvedStudentId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  collegeIdName       String?
+  collegeIdSize       Int?
+  collegeIdType       String?
+  collegeIdUploadedAt DateTime?
+  passwordHash        String    @default("")
+  approvedStudent     Student?  @relation(fields: [approvedStudentId], references: [id])
+  bus                 Bus       @relation(fields: [busId], references: [id])
+  route               Route     @relation(fields: [routeId], references: [id])
+  stop                Stop      @relation(fields: [stopId], references: [id])
 
   @@index([email])
   @@index([studentCode])
   @@index([status, createdAt])
   @@map("registration_requests")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
 }
